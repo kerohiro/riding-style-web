@@ -6,6 +6,7 @@ import {RideMap} from './maps.js';
 import {Pose} from './pose.js';
 import {syncFollow} from './follow.js';
 import {PlaybackClock,RidePlayback} from './playback.js';
+import {TIMELINE_SERIES,timelineSeries,timelineY,readTimelineSelection} from './timeline.js';
 const $=id=>document.getElementById(id);
 document.querySelector('#app').innerHTML=`
 <header><a class="brand" href="./"><span class="brand-mark">↗</span> RIDE<span>ATLAS</span></a><div class="header-right"><span class="live-dot"></span><span>RIDING STYLE ANALYSIS</span><button id="settings" class="icon-button" aria-label="表示・地図設定">⚙</button></div></header>
@@ -15,7 +16,7 @@ document.querySelector('#app').innerHTML=`
 <div class="stats"><div class="stat"><span>速度</span><strong id="speed">—</strong><small>km/h</small></div><div class="stat"><span id="lean-label">リーン角・推定</span><strong id="lean">—</strong><small>deg</small></div><div class="stat"><span>合成加速度</span><strong id="accel">—</strong><small>m/s²</small></div></div>
 <div class="panel pose-panel"><div class="section-label">3D TELEMETRY <span>車体座標</span></div><div class="telemetry-modes" role="group" aria-label="3Dテレメトリの表示元"><button id="telemetry-ride" aria-pressed="true">走行データ</button><button id="telemetry-sensor" aria-pressed="false">センサー確認</button></div><p id="telemetry-status" role="status">走行データの姿勢を表示中</p><div id="pose"></div><div class="pose-key"><span>● 車体姿勢</span><span>● 加速度ベクトル</span><span>ドラッグで回転</span></div><div class="vector-values"><div>左右 <b id="ax">—</b></div><div>前後 <b id="ay">—</b></div><div>上下 <b id="az">—</b></div></div><p class="direction" id="direction">水平向き — / 仰角 —</p></div>
 </aside></div>
-<section class="panel timeline"><div class="timeline-title"><div><span class="section-label">RIDE TIMELINE</span><span id="sample-time"></span></div><div class="playback-controls"><label for="playback-rate">再生倍率 <input id="playback-rate" type="number" min="0.01" max="100" step="any" value="1" aria-label="再生倍率"> ×</label><button id="play" class="secondary small">▶ 再生</button></div></div><div class="chart-description">縦軸：推定リーン角（°）／ ＋右・−左 <span>横軸：走行サンプル順</span></div><p id="playback-position" class="playback-position">1× / 0.00秒</p><div class="chart-layout"><div class="chart-axis" aria-label="リーン角の目盛"><span id="chart-upper">+60°</span><span>0°</span><span id="chart-lower">−60°</span></div><canvas id="chart" aria-label="走行中の推定リーン角（度）、正は右・負は左"></canvas><div id="chart-cursor" aria-hidden="true"></div></div><input type="range" id="timeline" min="0" value="0" step="any" aria-label="走行位置"><div class="timeline-endpoints"><span>START <b id="start-time"></b></span><span>タイムライン・地図上の軌跡を選んで詳細を表示</span><span>FINISH <b id="end-time"></b></span></div></section>
+<section class="panel timeline"><div class="timeline-title"><div><span class="section-label">RIDE TIMELINE</span><span id="sample-time"></span></div><div class="playback-controls"><label for="playback-rate">再生倍率 <input id="playback-rate" type="number" min="0.01" max="100" step="any" value="1" aria-label="再生倍率"> ×</label><button id="play" class="secondary small">▶ 再生</button></div></div><fieldset class="chart-series-controls"><legend>グラフの表示項目</legend><label style="--series-color:#54efbd"><input type="checkbox" aria-label="リーン角を表示" data-chart-series="lean" checked> <span class="series-line"></span>リーン角（°）<small id="chart-value-lean"></small></label><label style="--series-color:#65baff"><input type="checkbox" aria-label="速度を表示" data-chart-series="speed" checked> <span class="series-line dashed"></span>速度（km/h）<small id="chart-value-speed"></small></label><label style="--series-color:#ffb567"><input type="checkbox" aria-label="合成加速度を表示" data-chart-series="acceleration" checked> <span class="series-line dotted"></span>合成加速度（m/s²）<small id="chart-value-acceleration"></small></label></fieldset><div class="chart-description">縦軸：色ごとの独立目盛（リーン角は＋右／−左）<span>横軸：走行サンプル順</span></div><p class="chart-scale-note">目盛はログ全体から自動調整。高さが同じでも、異なる項目の数値が同じとは限りません。</p><p id="playback-position" class="playback-position">1× / 0.00秒</p><div class="chart-layout"><div id="chart-axes" class="chart-axes" aria-label="表示項目ごとの縦軸目盛"></div><canvas id="chart" aria-label="リーン角・速度・合成加速度の重ね合わせグラフ"></canvas><div id="chart-cursor" aria-hidden="true"></div></div><input type="range" id="timeline" min="0" value="0" step="any" aria-label="走行位置"><div class="timeline-endpoints"><span>START <b id="start-time"></b></span><span>タイムライン・地図上の軌跡を選んで詳細を表示</span><span>FINISH <b id="end-time"></b></span></div></section>
 <section class="panel recorder"><div class="recorder-copy"><span class="section-label">RECORD YOUR NEXT RIDE</span><h2>次の走りを記録する。</h2><p id="status" role="status">iPhoneを車体に縦向き・画面をライダー側に固定してください。</p></div><div class="record-buttons"><button id="permission" class="secondary">① センサーを許可</button><button id="calibrate" class="secondary">② 直立基準を設定</button><button id="record" class="primary">● 記録開始</button><button id="pause-recording" class="secondary" hidden>Ⅱ 記録を一時中断</button><button id="stop" class="danger" hidden>■ 終了して保存</button></div></section>
 <div class="bottom-actions"><button id="save" class="text-button">↓ この走行を保存</button><button id="export" class="text-button">↗ JSONを書き出す</button><label class="text-button import-label">＋ JSONを読み込む<input type="file" id="import" accept=".json,application/json" hidden></label><a id="apple-link" target="_blank" rel="noopener">Apple Mapで位置を開く ↗</a></div>
 <details class="notes"><summary>計測方法・精度・データの保存について</summary><p>停車して車体を直立させ、センサー許可 → 直立基準 → 記録開始の順に操作します。端末は縦向き、背面を前方、画面をライダー側に固定してください。基準設定後は取付方向を変えないでください。</p><p>計測は画面表示中のみ。計測中に画面ロック・別タブ・他アプリへ移動すると停止し、保存を試みます。一時中断中はページが保持されていれば、戻って同じログへ再開できます。再読込・ブラウザ強制終了後の同一ログへの記録再開は未対応です。ブラウザ強制終了時の完全保存は保証できないため、JSONも書き出してください。保存先はこのブラウザのIndexedDBで、別端末とは同期されません。プライベートブラウズやサイトデータ削除で消えることがあります。</p><p>リーン角は推定値で、旋回加速度・振動やブラウザのセンサー融合による誤差があります。実車での精度は未検証です。加速度は重力除去済み値を使用し、非対応時は「—」。GPS速度や進行方向が取得できない場合も「—」となります。GPSは直近3秒以内・水平精度50 m以内の測位を最大10 HzのIMUサンプルに紐付けます。独立した10 Hz GPS測位ではありません。</p><p>地図の柱はリーン角の大きさを示す模式表示で、車体の実寸や高度を示しません。加速度の矢印は車体の前後・左右成分をGPS進行方向で水平地図へ投影した参考表示です。仰角とリーン姿勢は右の3Dモデルで確認してください。Google Mapsの傾斜表示は地域・ズーム・地図仕様に依存します。</p><p>走行データはGitHubやサーバーへ送信しません。地図閲覧ではOpenStreetMapまたはGoogleへ通常の通信が発生します。走行中は操作せず、停車して確認してください。</p></details>
@@ -26,6 +27,9 @@ document.querySelector('#app').innerHTML=`
 let ride=demoRide(),previousRide=null,index=90,metric='speed',playing=null,lastRender=0,lastCheckpoint=0,saving=Promise.resolve();
 let map,pose,latestFix=null,follow=true,firstFix=true,telemetryMode='ride',liveMotion=null,sensorError=null;
 const playbackClock=new PlaybackClock();let playbackData=new RidePlayback(ride.samples),playbackRide=ride,playbackCount=ride.samples.length,playbackFrame=null,playbackRAF=null,lastPlaybackUI=0,lastPlaybackOverlay=0;
+let chartSelection=Object.keys(TIMELINE_SERIES),chartGeometry={left:0,width:1};
+try{const stored=localStorage.getItem('ride-timeline-series');if(stored)chartSelection=readTimelineSelection(JSON.parse(stored));}catch{}
+for(const input of document.querySelectorAll('[data-chart-series]'))input.checked=chartSelection.includes(input.dataset.chartSeries);
 let ranges=structuredClone(DEFAULT_RANGES);
 try {const stored=localStorage.getItem('ride-color-ranges');if(stored)ranges=validateRanges(JSON.parse(stored));}catch{}
 function updateLegend(){
@@ -106,11 +110,13 @@ function updatePlaybackNumbers(s){
  if(telemetryMode==='ride')renderTelemetry(s);
  $('sample-time').textContent=time(s.time)+' / '+(Math.floor(index)+1)+'点目';
  $('apple-link').href=`https://maps.apple.com/?ll=${s.latitude},${s.longitude}&q=${encodeURIComponent('走行データの選択位置')}`;
+ for(const [key,meta] of Object.entries(TIMELINE_SERIES))$('chart-value-'+key).textContent=fmt(meta.value(s),key==='acceleration'?2:1);
  $('playback-position').textContent=`${playbackClock.rate}× / ${((playbackFrame?.elapsed??0)/1000).toFixed(2)}秒 / ${(playbackData.duration/1000).toFixed(2)}秒`;
 }
 function updatePlaybackCursor(){
  $('timeline').value=index;
- $('chart-cursor').style.left=`calc(53px + (100% - 53px) * ${index/Math.max(1,ride.samples.length-1)})`;
+ $('chart-cursor').style.left=`${chartGeometry.left+chartGeometry.width*index/Math.max(1,ride.samples.length-1)}px`;
+ $('chart-cursor').hidden=chartSelection.length===0;
 }
 function renderTelemetry(s){
  for(const [id,k] of [['ax','x'],['ay','y'],['az','z']])$(id).textContent=signed(s?.acceleration?.[k]);
@@ -143,18 +149,39 @@ async function enableSensorPreview(){
 $('telemetry-sensor').onclick=()=>attempt(enableSensorPreview);
 $('telemetry-ride').onclick=()=>setTelemetryMode('ride');
 function drawChart(){
- const limit=ride.samples.reduce((max,s)=>s.lean===null?max:Math.max(max,Math.abs(s.lean)),60);
- const extent=Math.ceil(limit/15)*15;
- $('chart-upper').textContent=`+${extent}°`;$('chart-lower').textContent=`−${extent}°`;
- const canvas=$('chart'),w=canvas.clientWidth,h=canvas.clientHeight,scale=Math.min(devicePixelRatio,2);canvas.width=w*scale;canvas.height=h*scale;
+ const canvas=$('chart'),axes=$('chart-axes');
+ // Scale columns belong to each series and are separate from the heatmap settings.
+ const series=chartSelection.map(key=>timelineSeries(ride.samples,key,Math.max(1,canvas.clientWidth)));
+ axes.replaceChildren();
+ for(const entry of series){
+  const column=document.createElement('div');column.className='chart-axis-column';column.style.color=entry.color;column.setAttribute('aria-label',`${entry.label}（${entry.unit}）の目盛`);
+  const unit=document.createElement('span');unit.className='chart-axis-unit';unit.textContent=entry.unit;column.append(unit);
+  for(let tick=0;tick<=4;tick++){
+   const value=entry.max-(entry.max-entry.min)*tick/4,label=document.createElement('span');
+   label.textContent=(entry.key==='lean'&&value>0?'+':'')+Number(value.toFixed(2));column.append(label);
+  }
+  axes.append(column);
+ }
+ const w=canvas.clientWidth,h=canvas.clientHeight,scale=Math.min(devicePixelRatio,2);canvas.width=w*scale;canvas.height=h*scale;
+ chartGeometry={left:canvas.offsetLeft,width:w};$('timeline').style.width=w+'px';$('timeline').style.marginLeft=chartGeometry.left+'px';
  const c=canvas.getContext('2d');c.scale(scale,scale);c.clearRect(0,0,w,h);
- c.strokeStyle='#25323e';c.lineWidth=1;for(const y of [4,h/2,h-4]){c.beginPath();c.moveTo(0,y);c.lineTo(w,y);c.stroke();}
- c.beginPath();c.strokeStyle='#54efbd';c.lineWidth=1.5;
- const stride=Math.max(1,Math.floor(ride.samples.length/w));
- let pen=false;
- for(let i=0;i<ride.samples.length;i+=stride){const s=ride.samples[i];if(s.lean===null){pen=false;continue;}if(i>0 && (s.segment??0)!==(ride.samples[Math.max(0,i-stride)].segment??0))pen=false;const x=i/Math.max(1,ride.samples.length-1)*w,y=h/2-s.lean/extent*(h/2-4);if(pen)c.lineTo(x,y);else c.moveTo(x,y);pen=true;}
- c.stroke();updatePlaybackCursor();
+ c.strokeStyle='#25323e';c.lineWidth=1;
+ for(let tick=0;tick<=4;tick++){const y=4+(h-8)*tick/4;c.beginPath();c.moveTo(0,y);c.lineTo(w,y);c.stroke();}
+ for(const entry of series){
+  c.beginPath();c.strokeStyle=entry.color;c.lineWidth=1.6;c.setLineDash(entry.dash);let pen=false;
+  for(const point of entry.points){if(point===null){pen=false;continue;}const x=point.index/Math.max(1,ride.samples.length-1)*w,y=timelineY(point.value,entry,h);if(pen)c.lineTo(x,y);else c.moveTo(x,y);pen=true;}
+  c.stroke();
+ }
+ c.setLineDash([]);
+ if(!series.length){c.fillStyle='#a9bac9';c.font='12px sans-serif';c.textAlign='center';c.fillText('表示する項目を選択してください',w/2,h/2);}
+ canvas.setAttribute('aria-label',series.length?series.map(s=>`${s.label}（${s.unit}）${s.hasData?'':'・データなし'}`).join('、')+'の重ね合わせグラフ。縦軸は色ごとの独立目盛。':'表示項目なし');
+ updatePlaybackCursor();
 }
+for(const input of document.querySelectorAll('[data-chart-series]'))input.onchange=()=>{
+ chartSelection=Object.keys(TIMELINE_SERIES).filter(key=>document.querySelector(`[data-chart-series="${key}"]`).checked);
+ try{localStorage.setItem('ride-timeline-series',JSON.stringify(chartSelection));}catch{notify('表示項目を変更しましたが、端末への保存に失敗しました');}
+ drawChart();
+};
 new ResizeObserver(drawChart).observe($('chart'));
 $('timeline').oninput=e=>{stopPlayback();setTelemetryMode('ride');index=Number(e.target.value);renderSelected();};
 $('chart').onclick=e=>{if(recorder.active)return;stopPlayback();setTelemetryMode('ride');index=Math.round((e.offsetX/$('chart').clientWidth)*(ride.samples.length-1));renderSelected();};
