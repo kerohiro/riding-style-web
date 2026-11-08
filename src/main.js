@@ -9,7 +9,7 @@ const $=id=>document.getElementById(id);
 document.querySelector('#app').innerHTML=`
 <header><a class="brand" href="./"><span class="brand-mark">↗</span> RIDE<span>ATLAS</span></a><div class="header-right"><span class="live-dot"></span><span>RIDING STYLE ANALYSIS</span><button id="settings" class="icon-button" aria-label="表示・地図設定">⚙</button></div></header>
 <main><section class="intro"><div><div class="eyebrow">EVERY CORNER TELLS A STORY</div><h1>走りを、立体で読み解く。</h1><p>ライン、加速、リーン。その瞬間を、もう一度。</p></div><button id="library" class="secondary">▤ 走行ライブラリ</button></section>
-<div class="workspace"><section class="map-panel"><div class="map-toolbar"><div class="tabs" role="group" aria-label="軌跡の色分け"><button data-metric="speed" class="active">速度</button><button data-metric="acceleration">加速度</button><button data-metric="lean">リーン角</button></div><div class="map-actions"><button id="pitch" aria-label="地図の傾きを切替">3D</button><button id="fit" aria-label="走行全体を表示">⛶</button><button id="focus" aria-label="選択位置へ移動">⌖</button></div></div><button id="follow" class="follow-control" aria-pressed="true">◎ 現在地追従 ON</button><div id="map"></div><div id="map-warning" hidden></div><div class="map-badge"><span class="live-dot"></span><span id="ride-kind">DEMO ROUTE</span><span class="badge-divider">/</span><span id="map-provider">OPENSTREETMAP</span></div><div class="map-caption">橙の矢印：水平加速度　柱の高さ：|リーン角| × 2 m（模式表示）</div><div class="map-legend"><span id="legend-title">SPEED</span><div class="gradient"></div><span id="legend-range">0 — 120 km/h</span></div></section>
+<div class="workspace"><section class="map-panel"><div class="map-toolbar"><div class="tabs" role="group" aria-label="軌跡の色分け"><button data-metric="speed" class="active">速度</button><button data-metric="acceleration">加速度</button><button data-metric="lean">リーン角</button></div><div class="map-actions"><button id="pitch" aria-label="地図の傾きを切替">3D</button><button id="fit" aria-label="走行全体を表示">⛶</button><button id="focus" aria-label="選択位置へ移動">⌖</button></div></div><button id="follow" class="follow-control" aria-pressed="true">◎ 現在地追従 ON</button><label class="orientation-control" for="orientation">地図の向き <select id="orientation" aria-label="地図の向き"><option value="north">北を上</option><option value="heading">進行方向を上</option></select></label><div id="map"></div><div id="map-warning" hidden></div><div class="map-badge"><span class="live-dot"></span><span id="ride-kind">DEMO ROUTE</span><span class="badge-divider">/</span><span id="map-provider">OPENSTREETMAP</span></div><div class="map-caption">橙の矢印：水平加速度　柱の高さ：|リーン角| × 2 m（模式表示）</div><div class="map-legend"><span id="legend-title">SPEED</span><div class="gradient"></div><span id="legend-range">0 — 120 km/h</span></div></section>
 <aside><div class="panel ride-overview"><div class="section-label">SELECTED RIDE <span id="demo-tag">DEMO</span></div><h2 id="ride-name"></h2><div class="overview-meta"><span id="ride-distance"></span><span id="ride-duration"></span></div></div>
 <div class="stats"><div class="stat"><span>速度</span><strong id="speed">—</strong><small>km/h</small></div><div class="stat"><span id="lean-label">リーン角・推定</span><strong id="lean">—</strong><small>deg</small></div><div class="stat"><span>合成加速度</span><strong id="accel">—</strong><small>m/s²</small></div></div>
 <div class="panel pose-panel"><div class="section-label">3D TELEMETRY <span>車体座標</span></div><div class="telemetry-modes" role="group" aria-label="3Dテレメトリの表示元"><button id="telemetry-ride" aria-pressed="true">走行データ</button><button id="telemetry-sensor" aria-pressed="false">センサー確認</button></div><p id="telemetry-status" role="status">走行データの姿勢を表示中</p><div id="pose"></div><div class="pose-key"><span>● 車体姿勢</span><span>● 加速度ベクトル</span><span>ドラッグで回転</span></div><div class="vector-values"><div>左右 <b id="ax">—</b></div><div>前後 <b id="ay">—</b></div><div>上下 <b id="az">—</b></div></div><p class="direction" id="direction">水平向き — / 仰角 —</p></div>
@@ -34,7 +34,9 @@ function updateFollowLabel(){
  $('follow').setAttribute('aria-pressed',String(follow));
  $('follow').textContent=`◎ ${recorder.active?'現在地':'再生位置'}追従 ${follow?'ON':'OFF'}`;
 }
+function updateMapTracking(){map?.setTracking({enabled:follow,recording:recorder.active,duration:recorder.active?600:playing?150:200});}
 function followPosition(){
+ updateMapTracking();
  if(syncFollow(map,{enabled:follow,recording:recorder.active,sample:ride.samples[index],fix:latestFix,initial:firstFix}) && recorder.active)firstFix=false;
 }
 function setFollow(enabled){
@@ -91,7 +93,7 @@ function renderSelected(){
  if(telemetryMode==='ride')renderTelemetry(s);
  $('sample-time').textContent=time(s.time)+' / '+(index+1)+'点目';
  $('apple-link').href=`https://maps.apple.com/?ll=${s.latitude},${s.longitude}&q=${encodeURIComponent('走行データの選択位置')}`;
- map?.update(ride.samples,metric,index);if(!recorder.active)followPosition();drawChart();
+ updateMapTracking();map?.update(ride.samples,metric,index);if(!recorder.active)followPosition();drawChart();
 }
 function renderTelemetry(s){
  for(const [id,k] of [['ax','x'],['ay','y'],['az','z']])$(id).textContent=signed(s?.acceleration?.[k]);
@@ -144,6 +146,8 @@ $('play').onclick=()=>{setTelemetryMode('ride');if(playing){stopPlayback();retur
 for(const button of document.querySelectorAll('[data-metric]'))button.onclick=()=>{metric=button.dataset.metric;document.querySelectorAll('[data-metric]').forEach(b=>b.classList.toggle('active',b===button));updateLegend();renderSelected();};
 $('pitch').onclick=()=>{map?.togglePitch();$('pitch').textContent=map?.pitch?'3D':'2D';};$('fit').onclick=()=>{setFollow(false);if(map?.google)map.renderGoogle(true);else map?.fit();};$('focus').onclick=()=>{setFollow(true);map?.focus();};
 $('follow').onclick=()=>setFollow(!follow);
+$('orientation').onchange=()=>{map?.setOrientation($('orientation').value);try{localStorage.setItem('ride-map-orientation',$('orientation').value);}catch{}};
+try{const mode=localStorage.getItem('ride-map-orientation');if(mode==='heading'){$('orientation').value=mode;map?.setOrientation(mode);}}catch{}
 async function attempt(fn){try{await fn();}catch(e){notify(e.message);status(e.message);}}
 $('permission').onclick=()=>attempt(enableSensorPreview);$('calibrate').onclick=()=>attempt(()=>recorder.calibrate());
 $('record').onclick=()=>attempt(async()=>{stopPlayback();previousRide=ride;latestFix=null;firstFix=true;setFollow(true);await recorder.start();if(recorder.active){ride=recorder.ride;index=0;setTelemetryMode('sensor');render();}});

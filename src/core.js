@@ -1,3 +1,4 @@
+import {courseBetween} from './motion.js';
 export const G = 9.80665;
 export const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
 export const dot = (a,b) => a.reduce((s,v,i)=>s+v*b[i],0);
@@ -49,6 +50,7 @@ export function demoRide() {
     const t=i/419*Math.PI*2;
     return {id:crypto.randomUUID(),time:new Date(Date.parse(startedAt)+i*1000).toISOString(),latitude:35.211+0.011*Math.sin(t),longitude:138.994+0.016*Math.cos(t)+0.003*Math.sin(t*3),altitude:750+30*Math.sin(t),speed:13+6*Math.cos(t*3),course:(360-t*180/Math.PI)%360,accuracy:4,lean:34*Math.sin(t*3),acceleration:{x:3.5*Math.sin(t*3),y:2*Math.sin(t*5),z:0.3*Math.cos(t*7)}};
   });
+  samples.forEach((s,i)=>{s.course=courseBetween(samples[Math.max(0,i-1)],samples[Math.min(samples.length-1,i+1)]);});
   return {schemaVersion:1,id:crypto.randomUUID(),name:'箱根スカイライン / DEMO',startedAt,samples,isDemo:true};
 }
 export function validateRide(input) {
