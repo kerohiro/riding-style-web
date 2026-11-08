@@ -23,6 +23,7 @@ export class Pose {
  }
  update(s){
   this.bike.rotation.z=-(s?.lean??0)*Math.PI/180;
+  this.bike.rotation.x=(s?.pitch??0)*Math.PI/180;
   const a=s?.acceleration;this.arrow.visible=!!a&&Math.hypot(a.x,a.y,a.z)>0.05;
   if(this.arrow.visible){this.arrow.setDirection(new THREE.Vector3(a.x,a.z,-a.y).normalize());this.arrow.setLength(Math.min(2,Math.hypot(a.x,a.y,a.z)/3),0.2,0.12);}this.render();
  }

@@ -20,3 +20,20 @@ test('valid GPS updates notify tracking without waiting for IMU samples; poor fi
  }finally{recorder.stop();}
  assert.ok(cleared);assert.equal(recorder.active,false);
 });
+test('sensor preview works before calibration and recording, without GPS or saved samples',()=>{
+ globalThis.window={addEventListener(){}};globalThis.document={addEventListener(){}};
+ Object.defineProperty(globalThis,'navigator',{configurable:true,value:{}});
+ const previews=[],samples=[];
+ const recorder=new Recorder(ride=>samples.push(ride),()=>{},()=>{},()=>{},motion=>previews.push(motion));
+ const event={accelerationIncludingGravity:{x:4.9,y:8.487,z:0},acceleration:{x:0,y:0,z:0}};
+ recorder.motion(event);
+ assert.equal(previews.length,1);assert.ok(Math.abs(previews[0].lean+30)<0.01);
+ assert.equal(previews[0].calibrated,false);assert.equal(recorder.active,false);
+ assert.equal(recorder.ride,undefined);assert.equal(samples.length,0);
+ recorder.calibrate();recorder.previewTime=-Infinity;recorder.motion(event);
+ assert.equal(previews[1].calibrated,true);assert.ok(Math.abs(previews[1].lean)<0.001);
+ recorder.previewTime=-Infinity;recorder.motion({accelerationIncludingGravity:{x:0,y:8,z:4},acceleration:null});
+ assert.equal(previews[2].acceleration,null);assert.ok(Math.abs(previews[2].pitch)>20);
+ recorder.previewTime=-Infinity;recorder.motion({accelerationIncludingGravity:{x:null,y:8,z:4},acceleration:null});
+ assert.equal(previews.length,3);
+});

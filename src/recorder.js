@@ -1,7 +1,7 @@
-import {calibrate,measure} from './core.js';
+import {calibrate,measure,dot,norm} from './core.js';
 export class Recorder {
-  constructor(onSample,onStatus,onStop,onFix) {
-    Object.assign(this,{onSample,onStatus,onStop,onFix,basis:null,gravity:null,acceleration:null,fix:null,active:false,last:0,imuTime:0});
+  constructor(onSample,onStatus,onStop,onFix,onMotion) {
+    Object.assign(this,{onSample,onStatus,onStop,onFix,onMotion,previewTime:-Infinity,basis:null,gravity:null,acceleration:null,fix:null,active:false,last:0,imuTime:0});
     window.addEventListener('devicemotion',e=>this.motion(e));
     document.addEventListener('visibilitychange',()=>{if(document.hidden && this.active)this.stop('画面が非表示になったため停止・保存しました');});
   }
@@ -24,6 +24,11 @@ export class Recorder {
     // W3C proper acceleration includes +g at rest. Convert to downward gravity.
     this.gravity=[g.x,g.y,g.z].map((v,i)=>(this.acceleration?.[i]??0)-v);
     this.imuTime=performance.now();this.rotationRate=e.rotationRate?{alpha:e.rotationRate.alpha,beta:e.rotationRate.beta,gamma:e.rotationRate.gamma}:null;
+    if(norm(this.gravity)>0.01 && this.imuTime-this.previewTime>=33) {
+      const basis=this.basis??{right:[1,0,0],forward:[0,0,-1],up:[0,1,0]};
+      this.previewTime=this.imuTime;
+      this.onMotion?.({...measure(this.gravity,this.acceleration,basis),pitch:Math.atan2(dot(this.gravity,basis.forward),-dot(this.gravity,basis.up))*180/Math.PI,receivedAt:this.imuTime,calibrated:!!this.basis});
+    }
     const now=Date.now();
     if(!this.active || now-this.last<100 || !this.fix || now-this.fix.timestamp>3000)return;
     this.last=now;
