@@ -1,4 +1,5 @@
 import './style.css';
+import {leanGaugeMarkup,renderLeanCard} from './lean-gauge.js';
 import {demoRide,validateRide,distance,magnitude,DEFAULT_RANGES,validateRanges} from './core.js';
 import {saveRide,listRides,deleteRide} from './storage.js';
 import {Recorder} from './recorder.js';
@@ -13,7 +14,7 @@ document.querySelector('#app').innerHTML=`
 <main><section class="intro"><div><div class="eyebrow">EVERY CORNER TELLS A STORY</div><h1>走りを、立体で読み解く。</h1><p>ライン、加速、リーン。その瞬間を、もう一度。</p></div><button id="library" class="secondary">▤ 走行ライブラリ</button></section>
 <div class="workspace"><section class="map-panel"><div class="map-toolbar"><div class="tabs" role="group" aria-label="軌跡の色分け"><button data-metric="speed" class="active">速度</button><button data-metric="acceleration">加速度</button><button data-metric="lean">リーン角</button></div><div class="map-actions"><button id="pitch" aria-label="地図の傾きを切替">3D</button><button id="fit" aria-label="走行全体を表示">⛶</button><button id="focus" aria-label="選択位置へ移動">⌖</button></div></div><button id="follow" class="follow-control" aria-pressed="true">◎ 現在地追従 ON</button><label class="orientation-control" for="orientation">地図の向き <select id="orientation" aria-label="地図の向き"><option value="north">北を上</option><option value="heading">進行方向を上</option></select></label><div id="map"></div><div id="map-warning" hidden></div><div class="map-badge"><span class="live-dot"></span><span id="ride-kind">DEMO ROUTE</span><span class="badge-divider">/</span><span id="map-provider">OPENSTREETMAP</span></div><div class="map-caption">橙の矢印：水平加速度　柱の高さ：|リーン角| × 2 m（模式表示）</div><div class="map-legend"><span id="legend-title">SPEED</span><div class="gradient"></div><span id="legend-range">0 — 120 km/h</span></div></section>
 <aside><div class="panel ride-overview"><div class="section-label">SELECTED RIDE <span id="demo-tag">DEMO</span></div><h2 id="ride-name"></h2><div class="overview-meta"><span id="ride-distance"></span><span id="ride-duration"></span></div></div>
-<div class="stats"><div class="stat"><span>速度</span><strong id="speed">—</strong><small>km/h</small></div><div class="stat"><span id="lean-label">リーン角・推定</span><strong id="lean">—</strong><small>deg</small></div><div class="stat"><span>合成加速度</span><strong id="accel">—</strong><small>m/s²</small></div></div>
+<div class="stats"><div class="stat"><span>速度</span><strong id="speed">—</strong><small>km/h</small></div><div class="stat lean-stat" id="lean-card" role="img" aria-label="推定リーン角 データなし" data-valid="false"><span id="lean-label">リーン角・推定</span>${leanGaugeMarkup()}<strong id="lean">—</strong><small>deg</small></div><div class="stat"><span>合成加速度</span><strong id="accel">—</strong><small>m/s²</small></div></div>
 <div class="panel pose-panel"><div class="section-label">3D TELEMETRY <span>車体座標</span></div><div class="telemetry-modes" role="group" aria-label="3Dテレメトリの表示元"><button id="telemetry-ride" aria-pressed="true">走行データ</button><button id="telemetry-sensor" aria-pressed="false">センサー確認</button></div><p id="telemetry-status" role="status">走行データの姿勢を表示中</p><div id="pose"></div><div class="pose-key"><span>● 車体姿勢</span><span>● 加速度ベクトル</span><span>ドラッグで回転</span></div><div class="vector-values"><div>左右 <b id="ax">—</b></div><div>前後 <b id="ay">—</b></div><div>上下 <b id="az">—</b></div></div><p class="direction" id="direction">水平向き — / 仰角 —</p></div>
 </aside></div>
 <section class="panel timeline"><div class="timeline-title"><div><span class="section-label">RIDE TIMELINE</span><span id="sample-time"></span></div><div class="playback-controls"><label for="playback-rate">再生倍率 <input id="playback-rate" type="number" min="0.01" max="100" step="any" value="1" aria-label="再生倍率"> ×</label><button id="play" class="secondary small">▶ 再生</button></div></div><fieldset class="chart-series-controls"><legend>グラフの表示項目</legend><label style="--series-color:#54efbd"><input type="checkbox" aria-label="リーン角を表示" data-chart-series="lean" checked> <span class="series-line"></span>リーン角（°）<small id="chart-value-lean"></small></label><label style="--series-color:#65baff"><input type="checkbox" aria-label="速度を表示" data-chart-series="speed" checked> <span class="series-line dashed"></span>速度（km/h）<small id="chart-value-speed"></small></label><label style="--series-color:#ffb567"><input type="checkbox" aria-label="合成加速度を表示" data-chart-series="acceleration" checked> <span class="series-line dotted"></span>合成加速度（m/s²）<small id="chart-value-acceleration"></small></label></fieldset><div class="chart-description">縦軸：色ごとの独立目盛（リーン角は＋右／−左）<span>横軸：走行サンプル順</span></div><p class="chart-scale-note">目盛はログ全体から自動調整。高さが同じでも、異なる項目の数値が同じとは限りません。</p><p id="playback-position" class="playback-position">1× / 0.00秒</p><div class="chart-layout"><div id="chart-axes" class="chart-axes" aria-label="表示項目ごとの縦軸目盛"></div><canvas id="chart" aria-label="リーン角・速度・合成加速度の重ね合わせグラフ"></canvas><div id="chart-cursor" aria-hidden="true"></div></div><input type="range" id="timeline" min="0" value="0" step="any" aria-label="走行位置"><div class="timeline-endpoints"><span>START <b id="start-time"></b></span><span>タイムライン・地図上の軌跡を選んで詳細を表示</span><span>FINISH <b id="end-time"></b></span></div></section>
@@ -73,6 +74,7 @@ const recorder=new Recorder(value=>{
  followPosition();
 },motion=>{
  liveMotion=motion;sensorError=null;
+ if(recorder.active && !recorder.paused)renderLeanCard(motion.lean);
  if(telemetryMode==='sensor')renderLiveMotion();
 });
 const fmt=(v,d=1)=>v===null||v===undefined?'—':v.toFixed(d);
@@ -105,8 +107,8 @@ function renderSelected(){
  updatePlaybackCursor();
 }
 function updatePlaybackNumbers(s){
- $('speed').textContent=fmt(s.speed===null?null:s.speed*3.6,0);$('lean').textContent=fmt(s.lean===null?null:Math.abs(s.lean));
- $('lean-label').textContent=s.lean===null?'リーン角・推定':(s.lean>=0?'右':'左')+'リーン・推定';$('accel').textContent=fmt(magnitude(s),2);
+ $('speed').textContent=fmt(s.speed===null?null:s.speed*3.6,0);renderLeanCard(s.lean);
+ $('accel').textContent=fmt(magnitude(s),2);
  if(telemetryMode==='ride')renderTelemetry(s);
  $('sample-time').textContent=time(s.time)+' / '+(Math.floor(index)+1)+'点目';
  $('apple-link').href=`https://maps.apple.com/?ll=${s.latitude},${s.longitude}&q=${encodeURIComponent('走行データの選択位置')}`;
@@ -187,7 +189,7 @@ $('timeline').oninput=e=>{stopPlayback();setTelemetryMode('ride');index=Number(e
 $('chart').onclick=e=>{if(recorder.active)return;stopPlayback();setTelemetryMode('ride');index=Math.round((e.offsetX/$('chart').clientWidth)*(ride.samples.length-1));renderSelected();};
 function applyPlaybackFrame(frame,now,force=false){
  if(!frame)return;
- playbackFrame=frame;index=frame.index;updateMapTracking();map?.showPlaybackFrame(frame.sample);
+ playbackFrame=frame;index=frame.index;renderLeanCard(frame.sample.lean);updateMapTracking();map?.showPlaybackFrame(frame.sample);
  if(telemetryMode==='ride')pose?.update(frame.sample);
  updatePlaybackCursor();
  if(force || now-lastPlaybackUI>=100){updatePlaybackNumbers(frame.sample);lastPlaybackUI=now;}
