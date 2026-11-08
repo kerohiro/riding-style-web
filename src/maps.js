@@ -28,16 +28,24 @@ export class RideMap {
   update(samples,metric,selected,fit=false) {
     Object.assign(this,{samples,metric,selected});
     if(this.google)this.renderGoogle(fit);else {this.render();if(fit)this.fit();}
-    if(!this.recording && samples[selected])this.moveLocation(samples[selected]);
+    if(!this.recording && !this.playback && samples[selected])this.moveLocation(samples[selected]);
   }
   setRanges(ranges) { this.ranges=ranges; if(this.google)this.renderGoogle(false);else this.render(); }
-  setTracking({enabled,recording,duration}) {this.follow=enabled;this.recording=recording;this.duration=duration;}
+  setTracking({enabled,recording,duration,playback=false}) {this.follow=enabled;this.recording=recording;this.duration=duration;this.playback=playback;}
   setOrientation(mode) {
     this.orientation=mode==='heading'?'heading':'north';
     const position=this.tween.target;
     if(position)this.animatePosition({...position,bearing:this.orientation==='heading'?this.heading:0},250);
   }
+  showPlaybackFrame(sample){
+    cancelAnimationFrame(this.animation);
+    const direction=resolveHeading(sample,this.heading,this.headingLocation);
+    this.heading=direction.heading;this.headingLocation=direction.anchor;
+    const position={latitude:sample.latitude,longitude:sample.longitude,bearing:this.orientation==='heading'?this.heading:0};
+    this.tween=new PositionTween();this.tween.set(position,performance.now(),0);this.applyPosition(position);
+  }
   centerLocation(fix,initial=false) {
+    if(this.playback){this.showPlaybackFrame(fix.coords);return;}
     if(initial){if(this.google)this.google.setZoom(15);else this.map.jumpTo({zoom:15});}
     this.moveLocation(fix.coords,initial);
   }
@@ -87,7 +95,7 @@ export class RideMap {
     const route=[],vectors=[],lean=[];const stride=Math.max(1,Math.ceil(this.samples.length/1200));
     if(routeDirty)for(let i=0;i<this.samples.length-1;i+=stride){
       const a=this.samples[i],b=this.samples[Math.min(i+stride,this.samples.length-1)];
-      if(Date.parse(b.time)-Date.parse(a.time)>stride*3000)continue;
+      if((a.segment??0)!==(b.segment??0) || Date.parse(b.time)-Date.parse(a.time)>stride*3000)continue;
       route.push(feature({type:'LineString',coordinates:[[a.longitude,a.latitude],[b.longitude,b.latitude]]},{color:color(b,this.metric,this.ranges),index:i}));
     }
     const selected=this.samples[this.selected];
@@ -124,25 +132,28 @@ export class RideMap {
     }
     this.googleContainer=document.createElement('div');this.googleContainer.className='google-map';this.element.append(this.googleContainer);
     this.google=new google.maps.Map(this.googleContainer,{center:{lat:35.211,lng:138.994},zoom:12,mapTypeId:'hybrid',renderingType:google.maps.RenderingType.VECTOR,tilt:45,streetViewControl:false,fullscreenControl:false});
-    this.googleLines=[];this.renderGoogle(true);this.applyPosition(this.tween.at(performance.now()));
+    this.googleLines=[];this.googleRouteSamples=null;this.renderGoogle(true);this.applyPosition(this.tween.at(performance.now()));
   }
-  useOpenMap(){if(this.google){this.googleLines.forEach(l=>l.setMap(null));this.googleMarker?.setMap(null);this.googleContainer.remove();this.google=null;this.googleMarker=null;}this.map.resize();this.render();this.fit();this.applyPosition(this.tween.at(performance.now()));}
+  useOpenMap(){if(this.google){this.googleLines.forEach(l=>l.setMap(null));this.googleVectors?.forEach(l=>l.setMap(null));this.googleMarker?.setMap(null);this.googleContainer.remove();this.google=null;this.googleMarker=null;}this.map.resize();this.render();this.fit();this.applyPosition(this.tween.at(performance.now()));}
   renderGoogle(fit) {
-    this.googleLines.forEach(l=>l.setMap(null));this.googleLines=[];
+    const dirty=this.googleRouteSamples!==this.samples || this.googleRouteLength!==this.samples?.length || this.googleRouteMetric!==this.metric || this.googleRouteRanges!==this.ranges;
+    if(dirty){this.googleLines.forEach(l=>l.setMap(null));this.googleLines=[];}
+    this.googleVectors?.forEach(l=>l.setMap(null));this.googleVectors=[];
     const samples=this.samples||[],stride=Math.max(1,Math.ceil(samples.length/800));
-    for(let i=0;i<samples.length-1;i+=stride){
+    if(dirty)for(let i=0;i<samples.length-1;i+=stride){
       const a=samples[i],b=samples[Math.min(i+stride,samples.length-1)];
-      if(Date.parse(b.time)-Date.parse(a.time)>stride*3000)continue;
+      if((a.segment??0)!==(b.segment??0) || Date.parse(b.time)-Date.parse(a.time)>stride*3000)continue;
       const line=new google.maps.Polyline({map:this.google,path:[{lat:a.latitude,lng:a.longitude},{lat:b.latitude,lng:b.longitude}],strokeColor:color(b,this.metric,this.ranges),strokeWeight:6});
       line.addListener('click',()=>this.onSelect(i));this.googleLines.push(line);
     }
+    if(dirty){this.googleRouteSamples=this.samples;this.googleRouteLength=samples.length;this.googleRouteMetric=this.metric;this.googleRouteRanges=this.ranges;}
     const s=samples[this.selected];
     if(s){
       const position={lat:s.latitude,lng:s.longitude};
       if(!this.googleMarker)this.googleMarker=new google.maps.Marker({map:this.google,position});
       if(s.acceleration && s.course!==null && s.course>=0 && magnitude(s)>0.1){
         const end=destination(s.latitude,s.longitude,s.course+Math.atan2(s.acceleration.x,s.acceleration.y)*180/Math.PI,Math.hypot(s.acceleration.x,s.acceleration.y)*22);
-        this.googleLines.push(new google.maps.Polyline({map:this.google,path:[position,{lat:end[1],lng:end[0]}],strokeColor:'#ffb567',strokeWeight:3,icons:[{icon:{path:google.maps.SymbolPath.FORWARD_CLOSED_ARROW},offset:'100%'}]}));
+        this.googleVectors.push(new google.maps.Polyline({map:this.google,path:[position,{lat:end[1],lng:end[0]}],strokeColor:'#ffb567',strokeWeight:3,icons:[{icon:{path:google.maps.SymbolPath.FORWARD_CLOSED_ARROW},offset:'100%'}]}));
       }
     }
     if(fit && samples.length){const bounds=new google.maps.LatLngBounds();samples.forEach(s=>bounds.extend({lat:s.latitude,lng:s.longitude}));this.google.fitBounds(bounds,50);}

@@ -40,6 +40,7 @@ export function destination(lat,lon,bearing,meters) {
 export function distance(samples) {
   return samples.slice(1).reduce((sum,s,i)=>{
     const a=samples[i], rad=Math.PI/180;
+    if((a.segment??0)!==(s.segment??0))return sum;
     const h=Math.sin((s.latitude-a.latitude)*rad/2)**2+Math.cos(s.latitude*rad)*Math.cos(a.latitude*rad)*Math.sin((s.longitude-a.longitude)*rad/2)**2;
     return sum+6371000*2*Math.asin(Math.sqrt(clamp(h,0,1)));
   },0);
@@ -59,7 +60,7 @@ export function validateRide(input) {
   const date = v => { const d = typeof v==='number' ? new Date(978307200000+v*1000) : new Date(v); if(!Number.isFinite(d.getTime())) throw Error('日時が不正です'); return d.toISOString(); };
   const finite = v => typeof v==='number' && Number.isFinite(v);
   const samples=input.samples.map(s=>{
-    if(!s || !finite(s.latitude) || Math.abs(s.latitude)>90 || !finite(s.longitude) || Math.abs(s.longitude)>180 || !(s.lean===null || finite(s.lean)) || !(s.speed===null || (finite(s.speed)&&s.speed>=0)) || !(s.acceleration===null || (s.acceleration && ['x','y','z'].every(k=>finite(s.acceleration[k])))) || !finite(s.accuracy) || s.accuracy<0 || !(s.course===null || (finite(s.course)&&s.course>=-1&&s.course<=360)) || !(s.altitude===null || finite(s.altitude))) throw Error('サンプルの値が不正です');
+    if(!s || !(s.segment===undefined || (Number.isSafeInteger(s.segment)&&s.segment>=0)) || !finite(s.latitude) || Math.abs(s.latitude)>90 || !finite(s.longitude) || Math.abs(s.longitude)>180 || !(s.lean===null || finite(s.lean)) || !(s.speed===null || (finite(s.speed)&&s.speed>=0)) || !(s.acceleration===null || (s.acceleration && ['x','y','z'].every(k=>finite(s.acceleration[k])))) || !finite(s.accuracy) || s.accuracy<0 || !(s.course===null || (finite(s.course)&&s.course>=-1&&s.course<=360)) || !(s.altitude===null || finite(s.altitude))) throw Error('サンプルの値が不正です');
     return {...s,time:date(s.time)};
   });
   if(samples.some((s,i)=>i>0 && Date.parse(s.time)<Date.parse(samples[i-1].time))) throw Error('時刻の順序が不正です');

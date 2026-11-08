@@ -5,6 +5,7 @@ import {Recorder} from './recorder.js';
 import {RideMap} from './maps.js';
 import {Pose} from './pose.js';
 import {syncFollow} from './follow.js';
+import {PlaybackClock,RidePlayback} from './playback.js';
 const $=id=>document.getElementById(id);
 document.querySelector('#app').innerHTML=`
 <header><a class="brand" href="./"><span class="brand-mark">↗</span> RIDE<span>ATLAS</span></a><div class="header-right"><span class="live-dot"></span><span>RIDING STYLE ANALYSIS</span><button id="settings" class="icon-button" aria-label="表示・地図設定">⚙</button></div></header>
@@ -14,16 +15,17 @@ document.querySelector('#app').innerHTML=`
 <div class="stats"><div class="stat"><span>速度</span><strong id="speed">—</strong><small>km/h</small></div><div class="stat"><span id="lean-label">リーン角・推定</span><strong id="lean">—</strong><small>deg</small></div><div class="stat"><span>合成加速度</span><strong id="accel">—</strong><small>m/s²</small></div></div>
 <div class="panel pose-panel"><div class="section-label">3D TELEMETRY <span>車体座標</span></div><div class="telemetry-modes" role="group" aria-label="3Dテレメトリの表示元"><button id="telemetry-ride" aria-pressed="true">走行データ</button><button id="telemetry-sensor" aria-pressed="false">センサー確認</button></div><p id="telemetry-status" role="status">走行データの姿勢を表示中</p><div id="pose"></div><div class="pose-key"><span>● 車体姿勢</span><span>● 加速度ベクトル</span><span>ドラッグで回転</span></div><div class="vector-values"><div>左右 <b id="ax">—</b></div><div>前後 <b id="ay">—</b></div><div>上下 <b id="az">—</b></div></div><p class="direction" id="direction">水平向き — / 仰角 —</p></div>
 </aside></div>
-<section class="panel timeline"><div class="timeline-title"><div><span class="section-label">RIDE TIMELINE</span><span id="sample-time"></span></div><button id="play" class="secondary small">▶ 再生</button></div><div class="chart-description">縦軸：推定リーン角（°）／ ＋右・−左 <span>横軸：走行サンプル順</span></div><div class="chart-layout"><div class="chart-axis" aria-label="リーン角の目盛"><span id="chart-upper">+60°</span><span>0°</span><span id="chart-lower">−60°</span></div><canvas id="chart" aria-label="走行中の推定リーン角（度）、正は右・負は左"></canvas></div><input type="range" id="timeline" min="0" value="0" step="1" aria-label="走行位置"><div class="timeline-endpoints"><span>START <b id="start-time"></b></span><span>タイムライン・地図上の軌跡を選んで詳細を表示</span><span>FINISH <b id="end-time"></b></span></div></section>
-<section class="panel recorder"><div class="recorder-copy"><span class="section-label">RECORD YOUR NEXT RIDE</span><h2>次の走りを記録する。</h2><p id="status" role="status">iPhoneを車体に縦向き・画面をライダー側に固定してください。</p></div><div class="record-buttons"><button id="permission" class="secondary">① センサーを許可</button><button id="calibrate" class="secondary">② 直立基準を設定</button><button id="record" class="primary">● 記録開始</button><button id="stop" class="danger" hidden>■ 終了して保存</button></div></section>
+<section class="panel timeline"><div class="timeline-title"><div><span class="section-label">RIDE TIMELINE</span><span id="sample-time"></span></div><div class="playback-controls"><label for="playback-rate">再生倍率 <input id="playback-rate" type="number" min="0.01" max="100" step="any" value="1" aria-label="再生倍率"> ×</label><button id="play" class="secondary small">▶ 再生</button></div></div><div class="chart-description">縦軸：推定リーン角（°）／ ＋右・−左 <span>横軸：走行サンプル順</span></div><p id="playback-position" class="playback-position">1× / 0.00秒</p><div class="chart-layout"><div class="chart-axis" aria-label="リーン角の目盛"><span id="chart-upper">+60°</span><span>0°</span><span id="chart-lower">−60°</span></div><canvas id="chart" aria-label="走行中の推定リーン角（度）、正は右・負は左"></canvas><div id="chart-cursor" aria-hidden="true"></div></div><input type="range" id="timeline" min="0" value="0" step="any" aria-label="走行位置"><div class="timeline-endpoints"><span>START <b id="start-time"></b></span><span>タイムライン・地図上の軌跡を選んで詳細を表示</span><span>FINISH <b id="end-time"></b></span></div></section>
+<section class="panel recorder"><div class="recorder-copy"><span class="section-label">RECORD YOUR NEXT RIDE</span><h2>次の走りを記録する。</h2><p id="status" role="status">iPhoneを車体に縦向き・画面をライダー側に固定してください。</p></div><div class="record-buttons"><button id="permission" class="secondary">① センサーを許可</button><button id="calibrate" class="secondary">② 直立基準を設定</button><button id="record" class="primary">● 記録開始</button><button id="pause-recording" class="secondary" hidden>Ⅱ 記録を一時中断</button><button id="stop" class="danger" hidden>■ 終了して保存</button></div></section>
 <div class="bottom-actions"><button id="save" class="text-button">↓ この走行を保存</button><button id="export" class="text-button">↗ JSONを書き出す</button><label class="text-button import-label">＋ JSONを読み込む<input type="file" id="import" accept=".json,application/json" hidden></label><a id="apple-link" target="_blank" rel="noopener">Apple Mapで位置を開く ↗</a></div>
-<details class="notes"><summary>計測方法・精度・データの保存について</summary><p>停車して車体を直立させ、センサー許可 → 直立基準 → 記録開始の順に操作します。端末は縦向き、背面を前方、画面をライダー側に固定してください。基準設定後は取付方向を変えないでください。</p><p>計測は画面表示中のみ。画面ロック・別タブ・他アプリへ移動すると停止し、保存を試みます。ブラウザ強制終了時の完全保存は保証できないため、JSONも書き出してください。保存先はこのブラウザのIndexedDBで、別端末とは同期されません。プライベートブラウズやサイトデータ削除で消えることがあります。</p><p>リーン角は推定値で、旋回加速度・振動やブラウザのセンサー融合による誤差があります。実車での精度は未検証です。加速度は重力除去済み値を使用し、非対応時は「—」。GPS速度や進行方向が取得できない場合も「—」となります。GPSは直近3秒以内・水平精度50 m以内の測位を最大10 HzのIMUサンプルに紐付けます。独立した10 Hz GPS測位ではありません。</p><p>地図の柱はリーン角の大きさを示す模式表示で、車体の実寸や高度を示しません。加速度の矢印は車体の前後・左右成分をGPS進行方向で水平地図へ投影した参考表示です。仰角とリーン姿勢は右の3Dモデルで確認してください。Google Mapsの傾斜表示は地域・ズーム・地図仕様に依存します。</p><p>走行データはGitHubやサーバーへ送信しません。地図閲覧ではOpenStreetMapまたはGoogleへ通常の通信が発生します。走行中は操作せず、停車して確認してください。</p></details>
+<details class="notes"><summary>計測方法・精度・データの保存について</summary><p>停車して車体を直立させ、センサー許可 → 直立基準 → 記録開始の順に操作します。端末は縦向き、背面を前方、画面をライダー側に固定してください。基準設定後は取付方向を変えないでください。</p><p>計測は画面表示中のみ。計測中に画面ロック・別タブ・他アプリへ移動すると停止し、保存を試みます。一時中断中はページが保持されていれば、戻って同じログへ再開できます。再読込・ブラウザ強制終了後の同一ログへの記録再開は未対応です。ブラウザ強制終了時の完全保存は保証できないため、JSONも書き出してください。保存先はこのブラウザのIndexedDBで、別端末とは同期されません。プライベートブラウズやサイトデータ削除で消えることがあります。</p><p>リーン角は推定値で、旋回加速度・振動やブラウザのセンサー融合による誤差があります。実車での精度は未検証です。加速度は重力除去済み値を使用し、非対応時は「—」。GPS速度や進行方向が取得できない場合も「—」となります。GPSは直近3秒以内・水平精度50 m以内の測位を最大10 HzのIMUサンプルに紐付けます。独立した10 Hz GPS測位ではありません。</p><p>地図の柱はリーン角の大きさを示す模式表示で、車体の実寸や高度を示しません。加速度の矢印は車体の前後・左右成分をGPS進行方向で水平地図へ投影した参考表示です。仰角とリーン姿勢は右の3Dモデルで確認してください。Google Mapsの傾斜表示は地域・ズーム・地図仕様に依存します。</p><p>走行データはGitHubやサーバーへ送信しません。地図閲覧ではOpenStreetMapまたはGoogleへ通常の通信が発生します。走行中は操作せず、停車して確認してください。</p></details>
 <footer><span>RIDE ATLAS</span><span>GPS + IMU / BUILT FOR THE CURVES</span></footer></main>
 <dialog id="library-dialog"><div class="dialog-title"><h2>走行ライブラリ</h2><button class="icon-button" data-close="library-dialog" aria-label="閉じる">×</button></div><p>この端末・ブラウザに保存した走行</p><div id="ride-list"></div><button id="demo" class="secondary">デモ走行を開く</button></dialog>
 <dialog id="settings-dialog"><div class="dialog-title"><h2>表示・地図設定</h2><button class="icon-button" data-close="settings-dialog" aria-label="閉じる">×</button></div><form id="range-form"><h3>ヒートマップの色分け範囲</h3><p>下限以下は青、上限以上は赤で表示します。リーン角は左右共通の絶対値です。</p><div class="range-grid"><span>指標</span><span>下限</span><span>上限</span>
 <label for="speed-min">速度（km/h）</label><input type="number" id="speed-min" min="0" step="any" required aria-label="速度（km/h）の下限"><input type="number" id="speed-max" min="0" step="any" required aria-label="速度（km/h）の上限"><label for="acceleration-min">加速度（m/s²）</label><input type="number" id="acceleration-min" min="0" step="any" required aria-label="加速度（m/s²）の下限"><input type="number" id="acceleration-max" min="0" step="any" required aria-label="加速度（m/s²）の上限"><label for="lean-min">リーン角（°）</label><input type="number" id="lean-min" min="0" step="any" required aria-label="リーン角（°）の下限"><input type="number" id="lean-max" min="0" step="any" required aria-label="リーン角（°）の上限"></div><div class="range-buttons"><button type="submit" class="primary">色分け設定を保存</button><button type="button" id="reset-ranges" class="secondary">初期値に戻す</button></div><p id="range-status" role="status"></p></form><h3>地図プロバイダー</h3><p>標準地図はキー不要です。Google Mapsには、ご自身のGoogle CloudでMaps JavaScript APIと課金を有効化したキーが必要です。</p><label for="google-key">Google Maps APIキー</label><input type="password" id="google-key" placeholder="AIza…" autocomplete="off"><p class="muted">キーはこのブラウザに保存します。Google Cloudで利用元URLをこのサイトに制限してください。キーはリポジトリに含めません。</p><button id="google" class="primary">Google Mapsに切り替え</button><button id="openmap" class="secondary">標準地図に戻す</button><p id="google-error" role="status"></p></dialog><div id="toast" role="status" hidden></div>`;
 let ride=demoRide(),previousRide=null,index=90,metric='speed',playing=null,lastRender=0,lastCheckpoint=0,saving=Promise.resolve();
 let map,pose,latestFix=null,follow=true,firstFix=true,telemetryMode='ride',liveMotion=null,sensorError=null;
+const playbackClock=new PlaybackClock();let playbackData=new RidePlayback(ride.samples),playbackRide=ride,playbackCount=ride.samples.length,playbackFrame=null,playbackRAF=null,lastPlaybackUI=0,lastPlaybackOverlay=0;
 let ranges=structuredClone(DEFAULT_RANGES);
 try {const stored=localStorage.getItem('ride-color-ranges');if(stored)ranges=validateRanges(JSON.parse(stored));}catch{}
 function updateLegend(){
@@ -34,10 +36,10 @@ function updateFollowLabel(){
  $('follow').setAttribute('aria-pressed',String(follow));
  $('follow').textContent=`◎ ${recorder.active?'現在地':'再生位置'}追従 ${follow?'ON':'OFF'}`;
 }
-function updateMapTracking(){map?.setTracking({enabled:follow,recording:recorder.active,duration:recorder.active?600:playing?150:200});}
+function updateMapTracking(){map?.setTracking({enabled:follow,recording:recorder.active,duration:recorder.active?600:200,playback:!!playing});}
 function followPosition(){
  updateMapTracking();
- if(syncFollow(map,{enabled:follow,recording:recorder.active,sample:ride.samples[index],fix:latestFix,initial:firstFix}) && recorder.active)firstFix=false;
+ if(syncFollow(map,{enabled:follow,recording:recorder.active,sample:playing?playbackFrame?.sample:ride.samples[Math.floor(index)],fix:latestFix,initial:firstFix}) && recorder.active)firstFix=false;
 }
 function setFollow(enabled){
  follow=enabled;updateFollowLabel();followPosition();
@@ -45,7 +47,7 @@ function setFollow(enabled){
 
 function notify(text){$('toast').textContent=text;$('toast').hidden=false;clearTimeout(notify.timer);notify.timer=setTimeout(()=>$('toast').hidden=true,6000);}
 function status(text){$('status').textContent=text;}
-try {map=new RideMap($('map'),i=>{if(recorder.active)return;index=i;setTelemetryMode('ride');renderSelected();},text=>{$('map-warning').textContent=text;$('map-warning').hidden=false;});} catch(e){$('map').textContent='3D地図を起動できません。このブラウザでWebGLを有効にしてください。';}
+try {map=new RideMap($('map'),i=>{if(recorder.active)return;stopPlayback();index=i;setTelemetryMode('ride');renderSelected();},text=>{$('map-warning').textContent=text;$('map-warning').hidden=false;});} catch(e){$('map').textContent='3D地図を起動できません。このブラウザでWebGLを有効にしてください。';}
 map?.setRanges(ranges);updateLegend();
 try{pose=new Pose($('pose'));}catch{$('pose').textContent='3D表示にはWebGL対応ブラウザが必要です。数値データは下に表示します。';}
 function queueSave(value,quiet=false){
@@ -74,11 +76,14 @@ const signed=v=>v===null||v===undefined?'—':(v>=0?'+':'')+v.toFixed(2);
 const time=v=>new Date(v).toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
 function setRecording(active){
  updateFollowLabel();
- for(const id of ['record','calibrate','permission','library','save','import','play'])$(id).disabled=active;
- $('record').hidden=active;$('stop').hidden=!active;$('timeline').disabled=active;
- $('ride-kind').textContent=active?'● LIVE RECORDING':ride.isDemo?'DEMO ROUTE':'SAVED RIDE';
+ for(const id of ['record','permission','library','save','import','play'])$(id).disabled=active;
+ $('calibrate').disabled=active&&!recorder.paused;
+ $('record').hidden=active;$('stop').hidden=!active;$('pause-recording').hidden=!active;$('pause-recording').textContent=recorder.paused?'▶ 記録を再開':'Ⅱ 記録を一時中断';$('timeline').disabled=active;$('playback-rate').disabled=active;
+ $('ride-kind').textContent=active?(recorder.paused?'Ⅱ RECORDING PAUSED':'● LIVE RECORDING'):ride.isDemo?'DEMO ROUTE':'SAVED RIDE';
 }
 function render(){
+ if(!recorder.active && (playbackRide!==ride || playbackCount!==ride.samples.length)){playbackData=new RidePlayback(ride.samples);playbackRide=ride;playbackCount=ride.samples.length;}
+
  $('ride-name').textContent=ride.name;$('demo-tag').textContent=ride.isDemo?'DEMO':'GPS + IMU';
  $('ride-distance').textContent=(distance(ride.samples)/1000).toFixed(2)+' km';
  const duration=ride.samples.length>1?(Date.parse(ride.samples.at(-1).time)-Date.parse(ride.samples[0].time))/1000:0;
@@ -87,13 +92,25 @@ function render(){
  setRecording(recorder.active);renderSelected();drawChart();
 }
 function renderSelected(){
- const s=ride.samples[index];if(!s)return;
- $('timeline').value=index;$('speed').textContent=fmt(s.speed===null?null:s.speed*3.6,0);$('lean').textContent=fmt(s.lean===null?null:Math.abs(s.lean));
+ const frame=!recorder.active?playbackData.frame(playbackData.timeAtIndex(index)):null;
+ const s=frame?.sample??ride.samples[Math.floor(index)];if(!s)return;
+ if(frame){playbackFrame=frame;playbackClock.seek(frame.elapsed,performance.now());}
+ updatePlaybackNumbers(s);
+ updateMapTracking();map?.update(ride.samples,metric,Math.floor(index));
+ if(frame)map?.showPlaybackFrame(s);else if(!recorder.active)followPosition();
+ updatePlaybackCursor();
+}
+function updatePlaybackNumbers(s){
+ $('speed').textContent=fmt(s.speed===null?null:s.speed*3.6,0);$('lean').textContent=fmt(s.lean===null?null:Math.abs(s.lean));
  $('lean-label').textContent=s.lean===null?'リーン角・推定':(s.lean>=0?'右':'左')+'リーン・推定';$('accel').textContent=fmt(magnitude(s),2);
  if(telemetryMode==='ride')renderTelemetry(s);
- $('sample-time').textContent=time(s.time)+' / '+(index+1)+'点目';
+ $('sample-time').textContent=time(s.time)+' / '+(Math.floor(index)+1)+'点目';
  $('apple-link').href=`https://maps.apple.com/?ll=${s.latitude},${s.longitude}&q=${encodeURIComponent('走行データの選択位置')}`;
- updateMapTracking();map?.update(ride.samples,metric,index);if(!recorder.active)followPosition();drawChart();
+ $('playback-position').textContent=`${playbackClock.rate}× / ${((playbackFrame?.elapsed??0)/1000).toFixed(2)}秒 / ${(playbackData.duration/1000).toFixed(2)}秒`;
+}
+function updatePlaybackCursor(){
+ $('timeline').value=index;
+ $('chart-cursor').style.left=`calc(53px + (100% - 53px) * ${index/Math.max(1,ride.samples.length-1)})`;
 }
 function renderTelemetry(s){
  for(const [id,k] of [['ax','x'],['ay','y'],['az','z']])$(id).textContent=signed(s?.acceleration?.[k]);
@@ -106,7 +123,7 @@ function setTelemetryMode(mode){
  $('telemetry-ride').setAttribute('aria-pressed',String(mode==='ride'));
  $('telemetry-sensor').setAttribute('aria-pressed',String(mode==='sensor'));
  if(mode==='sensor'){stopPlayback();renderLiveMotion();}
- else { $('telemetry-status').textContent='走行データの姿勢を表示中';renderTelemetry(ride.samples[index]); }
+ else { $('telemetry-status').textContent='走行データの姿勢を表示中';renderTelemetry(playbackFrame?.sample??ride.samples[Math.floor(index)]); }
 }
 function renderLiveMotion(){
  if(sensorError){$('telemetry-status').textContent=sensorError;return;}
@@ -116,7 +133,7 @@ function renderLiveMotion(){
   return;
  }
  renderTelemetry(liveMotion);
- $('telemetry-status').textContent=`● LIVE IMU • ${liveMotion.calibrated?'直立基準を使用':'未校正・端末縦向き基準'}${recorder.active?' • 記録中':' • 保存なし'}${liveMotion.acceleration?'':' • 線形加速度なし'}`;
+ $('telemetry-status').textContent=`● LIVE IMU • ${liveMotion.calibrated?'直立基準を使用':'未校正・端末縦向き基準'}${recorder.active?(recorder.paused?' • 記録中断中':' • 記録中'):' • 保存なし'}${liveMotion.acceleration?'':' • 線形加速度なし'}`;
 }
 setInterval(()=>{if(telemetryMode==='sensor')renderLiveMotion();},1000);
 async function enableSensorPreview(){
@@ -135,14 +152,43 @@ function drawChart(){
  c.beginPath();c.strokeStyle='#54efbd';c.lineWidth=1.5;
  const stride=Math.max(1,Math.floor(ride.samples.length/w));
  let pen=false;
- for(let i=0;i<ride.samples.length;i+=stride){const s=ride.samples[i];if(s.lean===null){pen=false;continue;}const x=i/Math.max(1,ride.samples.length-1)*w,y=h/2-s.lean/extent*(h/2-4);if(pen)c.lineTo(x,y);else c.moveTo(x,y);pen=true;}
- c.stroke();const x=index/Math.max(1,ride.samples.length-1)*w;c.strokeStyle='#ffffff';c.beginPath();c.moveTo(x,0);c.lineTo(x,h);c.stroke();
+ for(let i=0;i<ride.samples.length;i+=stride){const s=ride.samples[i];if(s.lean===null){pen=false;continue;}if(i>0 && (s.segment??0)!==(ride.samples[Math.max(0,i-stride)].segment??0))pen=false;const x=i/Math.max(1,ride.samples.length-1)*w,y=h/2-s.lean/extent*(h/2-4);if(pen)c.lineTo(x,y);else c.moveTo(x,y);pen=true;}
+ c.stroke();updatePlaybackCursor();
 }
 new ResizeObserver(drawChart).observe($('chart'));
-$('timeline').oninput=e=>{setTelemetryMode('ride');index=Number(e.target.value);renderSelected();};
-$('chart').onclick=e=>{if(recorder.active)return;setTelemetryMode('ride');index=Math.round((e.offsetX/$('chart').clientWidth)*(ride.samples.length-1));renderSelected();};
-function stopPlayback(){clearInterval(playing);playing=null;$('play').textContent='▶ 再生';}
-$('play').onclick=()=>{setTelemetryMode('ride');if(playing){stopPlayback();return;}if(index>=ride.samples.length-1)index=0;setFollow(true);renderSelected();$('play').textContent='Ⅱ 停止';playing=setInterval(()=>{index++;if(index>=ride.samples.length){index=ride.samples.length-1;stopPlayback();}renderSelected();},150);};
+$('timeline').oninput=e=>{stopPlayback();setTelemetryMode('ride');index=Number(e.target.value);renderSelected();};
+$('chart').onclick=e=>{if(recorder.active)return;stopPlayback();setTelemetryMode('ride');index=Math.round((e.offsetX/$('chart').clientWidth)*(ride.samples.length-1));renderSelected();};
+function applyPlaybackFrame(frame,now,force=false){
+ if(!frame)return;
+ playbackFrame=frame;index=frame.index;updateMapTracking();map?.showPlaybackFrame(frame.sample);
+ if(telemetryMode==='ride')pose?.update(frame.sample);
+ updatePlaybackCursor();
+ if(force || now-lastPlaybackUI>=100){updatePlaybackNumbers(frame.sample);lastPlaybackUI=now;}
+ if(force || now-lastPlaybackOverlay>=250){map?.update(ride.samples,metric,Math.floor(index));lastPlaybackOverlay=now;}
+}
+function stopPlayback(){
+ if(playing){const now=performance.now();playbackClock.pause(now);applyPlaybackFrame(playbackData.frame(playbackClock.position),now,true);}
+ cancelAnimationFrame(playbackRAF);playing=null;updateMapTracking();$('play').textContent='▶ 再生';
+}
+function playbackTick(now){
+ if(!playing)return;
+ const elapsed=Math.min(playbackData.duration,playbackClock.current(now));
+ applyPlaybackFrame(playbackData.frame(elapsed),now);
+ if(elapsed>=playbackData.duration){stopPlayback();return;}
+ playbackRAF=requestAnimationFrame(playbackTick);
+}
+$('play').onclick=()=>{
+ if(playing){stopPlayback();return;}
+ try{playbackClock.setRate(Number($('playback-rate').value),performance.now());}catch(e){notify(e.message);return;}
+ setTelemetryMode('ride');if(playbackClock.position>=playbackData.duration)playbackClock.seek(0,performance.now());
+ playing=true;playbackClock.play(performance.now());setFollow(true);$('play').textContent='Ⅱ 停止';playbackRAF=requestAnimationFrame(playbackTick);
+};
+$('playback-rate').oninput=()=>{const rate=Number($('playback-rate').value);if(Number.isFinite(rate)&&rate>=0.01&&rate<=100){playbackClock.setRate(rate,performance.now());$('playback-position').textContent=`${rate}× / ${((playbackFrame?.elapsed??0)/1000).toFixed(2)}秒`;}};
+$('playback-rate').onchange=()=>{
+ try{playbackClock.setRate(Number($('playback-rate').value),performance.now());$('playback-position').textContent=`${playbackClock.rate}× / ${((playbackFrame?.elapsed??0)/1000).toFixed(2)}秒`;}
+ catch(e){$('playback-rate').value=playbackClock.rate;notify(e.message);}
+};
+document.addEventListener('visibilitychange',()=>{if(document.hidden)stopPlayback();});
 for(const button of document.querySelectorAll('[data-metric]'))button.onclick=()=>{metric=button.dataset.metric;document.querySelectorAll('[data-metric]').forEach(b=>b.classList.toggle('active',b===button));updateLegend();renderSelected();};
 $('pitch').onclick=()=>{map?.togglePitch();$('pitch').textContent=map?.pitch?'3D':'2D';};$('fit').onclick=()=>{setFollow(false);if(map?.google)map.renderGoogle(true);else map?.fit();};$('focus').onclick=()=>{setFollow(true);map?.focus();};
 $('follow').onclick=()=>setFollow(!follow);
@@ -152,6 +198,7 @@ async function attempt(fn){try{await fn();}catch(e){notify(e.message);status(e.m
 $('permission').onclick=()=>attempt(enableSensorPreview);$('calibrate').onclick=()=>attempt(()=>recorder.calibrate());
 $('record').onclick=()=>attempt(async()=>{stopPlayback();previousRide=ride;latestFix=null;firstFix=true;setFollow(true);await recorder.start();if(recorder.active){ride=recorder.ride;index=0;setTelemetryMode('sensor');render();}});
 $('stop').onclick=()=>recorder.stop();
+$('pause-recording').onclick=()=>attempt(async()=>{$('pause-recording').disabled=true;try{if(recorder.paused)await recorder.resume();else {recorder.pause();if(recorder.ride.samples.length)await queueSave(recorder.ride,true);}setRecording(recorder.active);}finally{$('pause-recording').disabled=false;}});
 $('save').onclick=()=>queueSave(ride);
 $('export').onclick=()=>{const blob=new Blob([JSON.stringify(ride)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='ride-'+ride.id+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),10000);};
 function openRide(value){stopPlayback();ride=value;index=0;setTelemetryMode('ride');render();map?.update(ride.samples,metric,index,true);followPosition();}
@@ -184,6 +231,6 @@ $('reset-ranges').onclick=()=>{for(const key of Object.keys(DEFAULT_RANGES))for(
 window.gm_authFailure=()=>{$('google-error').textContent='Google Mapsの認証に失敗しました。API有効化・課金・キーのURL制限を確認してください。';notify('Google Maps認証失敗。地図設定から標準地図へ戻せます。');};
 $('google').onclick=async()=>{try{$('google-error').textContent='読み込み中…';const key=$('google-key').value.trim();await map.useGoogle(key);try{localStorage.setItem('google-maps-key',key);}catch{}$('google-error').textContent='Google Mapsに切り替えました。';$('map-provider').textContent='GOOGLE MAPS';followPosition();}catch(e){$('google-error').textContent=e.message;}};
 $('openmap').onclick=()=>{map?.useOpenMap();followPosition();$('map-provider').textContent='OPENSTREETMAP';$('settings-dialog').close();};
-window.addEventListener('pagehide',()=>{if(recorder.active)recorder.stop('ページ終了のため停止しました');});
+window.addEventListener('pagehide',()=>{if(recorder.active && !recorder.paused)recorder.stop('ページ終了のため停止しました');});
 window.addEventListener('beforeunload',e=>{if(recorder.active){e.preventDefault();e.returnValue='';}});
 render();map?.update(ride.samples,metric,index,true);followPosition();

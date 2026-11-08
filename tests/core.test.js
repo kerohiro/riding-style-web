@@ -37,3 +37,8 @@ test('custom color ranges: nonzero bounds, saturation, absolute lean and missing
  assert.throws(()=>validateRanges({}));
  assert.deepEqual(validateRanges(JSON.parse(JSON.stringify(ranges))),ranges);
 });
+
+test('ride distance excludes unrecorded travel across pause segments',()=>{
+ const samples=[{latitude:35,longitude:139,segment:0},{latitude:35,longitude:139.001,segment:0},{latitude:36,longitude:140,segment:1}];
+ assert.ok(distance(samples)<100);
+});

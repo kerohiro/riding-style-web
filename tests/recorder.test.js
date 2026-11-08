@@ -37,3 +37,21 @@ test('sensor preview works before calibration and recording, without GPS or save
  recorder.previewTime=-Infinity;recorder.motion({accelerationIncludingGravity:{x:null,y:8,z:4},acceleration:null});
  assert.equal(previews.length,3);
 });
+test('recording pause and resume retain the ride, reject old GPS callbacks and mark segments',async()=>{
+ const listeners={};globalThis.window={addEventListener(){}};globalThis.document={hidden:false,addEventListener(name,cb){listeners[name]=cb;}};
+ const callbacks=[];Object.defineProperty(globalThis,'navigator',{configurable:true,value:{geolocation:{watchPosition(cb){callbacks.push(cb);return callbacks.length;},clearWatch(){}}}});
+ const recorder=new Recorder(()=>{},()=>{},()=>{},()=>{});
+ const motion={accelerationIncludingGravity:{x:0,y:9.8,z:0},acceleration:{x:0,y:0,z:0}};
+ recorder.motion(motion);recorder.calibrate();await recorder.start();const id=recorder.ride.id;
+ const fix=longitude=>({timestamp:Date.now(),coords:{latitude:35,longitude,accuracy:5,altitude:0,speed:10,heading:90}});
+ try{
+ callbacks[0](fix(139));recorder.last=0;recorder.motion(motion);assert.equal(recorder.ride.samples.length,1);
+ recorder.pause();recorder.calibrate();callbacks[0](fix(140));recorder.last=0;recorder.motion(motion);assert.equal(recorder.ride.samples.length,1);
+ document.hidden=true;listeners.visibilitychange();assert.equal(recorder.active,true);document.hidden=false;
+ await recorder.resume();assert.equal(recorder.ride.id,id);assert.equal(recorder.fix,null);
+ callbacks[0](fix(140));assert.equal(recorder.fix,null);
+ callbacks[1](fix(139.001));recorder.last=0;recorder.motion(motion);
+ assert.equal(recorder.ride.samples.length,2);assert.equal(recorder.ride.samples[1].segment,1);
+ assert.ok(recorder.ride.pauses[0].endedAt);
+ }finally{recorder.stop();}
+});
