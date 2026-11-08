@@ -16,9 +16,20 @@ export function measure(gravity, acceleration, basis) {
 }
 export const magnitude = s => s.acceleration ? Math.hypot(s.acceleration.x,s.acceleration.y,s.acceleration.z) : null;
 export function metricValue(s,metric) { return metric==='speed' ? (s.speed===null?null:s.speed*3.6) : metric==='lean' ? (s.lean===null?null:Math.abs(s.lean)) : magnitude(s); }
-export function color(s,metric) {
+export const DEFAULT_RANGES = {speed:{min:0,max:120},acceleration:{min:0,max:10},lean:{min:0,max:60}};
+export function validateRanges(ranges) {
+  const result={};
+  for(const key of Object.keys(DEFAULT_RANGES)) {
+    const r=ranges?.[key];
+    if(!r || !Number.isFinite(r.min) || !Number.isFinite(r.max) || r.min<0 || r.max<=r.min) throw Error('色分けの範囲は0以上で、上限を下限より大きく設定してください');
+    result[key]={min:r.min,max:r.max};
+  }
+  return result;
+}
+export function color(s,metric,ranges=DEFAULT_RANGES) {
   const v=metricValue(s,metric); if(v===null) return '#768296';
-  const ratio=clamp(v/({speed:120,acceleration:10,lean:60}[metric]),0,1);
+  const {min,max}=ranges[metric];
+  const ratio=clamp((v-min)/(max-min),0,1);
   return `hsl(${Math.round((1-ratio)*220)}, 90%, 57%)`;
 }
 export function destination(lat,lon,bearing,meters) {

@@ -1,7 +1,7 @@
 import {calibrate,measure} from './core.js';
 export class Recorder {
-  constructor(onSample,onStatus,onStop) {
-    Object.assign(this,{onSample,onStatus,onStop,basis:null,gravity:null,acceleration:null,fix:null,active:false,last:0,imuTime:0});
+  constructor(onSample,onStatus,onStop,onFix) {
+    Object.assign(this,{onSample,onStatus,onStop,onFix,basis:null,gravity:null,acceleration:null,fix:null,active:false,last:0,imuTime:0});
     window.addEventListener('devicemotion',e=>this.motion(e));
     document.addEventListener('visibilitychange',()=>{if(document.hidden && this.active)this.stop('画面が非表示になったため停止・保存しました');});
   }
@@ -41,7 +41,7 @@ export class Recorder {
     const startedAt=new Date().toISOString();
     this.ride={schemaVersion:1,id:crypto.randomUUID(),name:new Date().toLocaleString('ja-JP')+' の走行',startedAt,samples:[],isDemo:false};
     this.watch=navigator.geolocation.watchPosition(fix=>{
-      if(fix.coords.accuracy<=50){this.fix=fix;this.onStatus(`記録中 • GPS ±${Math.round(fix.coords.accuracy)} m`);}
+      if(fix.coords.accuracy<=50){this.fix=fix;this.onFix?.(fix);this.onStatus(`記録中 • GPS ±${Math.round(fix.coords.accuracy)} m`);}
       else this.onStatus(`GPS精度待ち ±${Math.round(fix.coords.accuracy)} m`);
     },e=>{this.onStatus('GPS: '+e.message);if(e.code===1)this.stop('位置情報が拒否されたため停止しました');}, {enableHighAccuracy:true,maximumAge:0,timeout:15000});
     this.onStatus('記録中 • GPS受信待ち。画面を表示したまま使用してください');

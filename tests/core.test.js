@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {calibrate,measure,demoRide,validateRide,distance,color,destination} from '../src/core.js';
+import {calibrate,measure,demoRide,validateRide,distance,color,destination,DEFAULT_RANGES,validateRanges} from '../src/core.js';
 test('portrait mount: zero and signed lean, vehicle acceleration axes',()=>{
  const basis=calibrate([0,-9.80665,0]);
  for(const deg of [-45,0,45]){const r=deg*Math.PI/180;const result=measure([9.80665*Math.sin(r),-9.80665*Math.cos(r),0],[1,2,-3],basis);assert.ok(Math.abs(result.lean-deg)<1e-8);assert.deepEqual(result.acceleration,{x:1,y:3,z:2});}
@@ -21,4 +21,19 @@ test('Swift reference-date import and missing sensor data',()=>{
 test('geographic acceleration projection uses heading clockwise from north',()=>{
  const [east,lat]=destination(35,139,90,100);assert.ok(east>139);assert.ok(Math.abs(lat-35)<1e-8);
  const [lon,north]=destination(35,139,0,100);assert.equal(lon,139);assert.ok(north>35);
+});
+
+test('custom color ranges: nonzero bounds, saturation, absolute lean and missing values',()=>{
+ const ranges=validateRanges({...DEFAULT_RANGES,speed:{min:36,max:72},lean:{min:10,max:40},acceleration:{min:1,max:5}});
+ const s={speed:10,lean:-25,acceleration:{x:3,y:0,z:0}};
+ assert.equal(color(s,'speed',ranges),'hsl(220, 90%, 57%)');
+ assert.equal(color({...s,speed:15},'speed',ranges),'hsl(110, 90%, 57%)');
+ assert.equal(color({...s,speed:30},'speed',ranges),'hsl(0, 90%, 57%)');
+ assert.equal(color({...s,speed:0},'speed',ranges),'hsl(220, 90%, 57%)');
+ assert.equal(color(s,'lean',ranges),color({...s,lean:25},'lean',ranges));
+ assert.equal(color(s,'acceleration',ranges),'hsl(110, 90%, 57%)');
+ assert.equal(color({...s,speed:null},'speed',ranges),'#768296');
+ for(const range of [{min:10,max:10},{min:20,max:10},{min:-1,max:10},{min:0,max:Infinity},{min:NaN,max:10}])assert.throws(()=>validateRanges({...DEFAULT_RANGES,speed:range}));
+ assert.throws(()=>validateRanges({}));
+ assert.deepEqual(validateRanges(JSON.parse(JSON.stringify(ranges))),ranges);
 });

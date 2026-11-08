@@ -2,12 +2,12 @@ import * as maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import workerURL from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url';
 maplibregl.setWorkerUrl(workerURL);
-import {color,destination,magnitude} from './core.js';
+import {color,destination,magnitude,DEFAULT_RANGES} from './core.js';
 const collection=features=>({type:'FeatureCollection',features});
 const feature=(geometry,properties={})=>({type:'Feature',geometry,properties});
 export class RideMap {
   constructor(element,onSelect,onError) {
-    this.element=element;this.onSelect=onSelect;this.onError=onError;this.pitch=55;this.metric='speed';
+    this.element=element;this.onSelect=onSelect;this.onError=onError;this.pitch=55;this.metric='speed';this.ranges=DEFAULT_RANGES;
     this.map=new maplibregl.Map({container:element,center:[138.994,35.211],zoom:12,pitch:55,style:{version:8,sources:{osm:{type:'raster',tiles:['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],tileSize:256,attribution:'© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'}},layers:[{id:'base',type:'raster',source:'osm',paint:{'raster-saturation':-0.65,'raster-brightness-max':0.72}}]}});
     this.map.addControl(new maplibregl.NavigationControl(),'top-right');
     this.marker=new maplibregl.Marker({color:'#54efbd'}).setLngLat([138.994,35.211]).addTo(this.map);
@@ -29,6 +29,12 @@ export class RideMap {
     if(this.google){this.renderGoogle(fit);return;}
     this.render();if(fit)this.fit();
   }
+  setRanges(ranges) { this.ranges=ranges; if(this.google)this.renderGoogle(false);else this.render(); }
+  centerLocation(fix,initial=false) {
+    const {latitude,longitude}=fix.coords;
+    if(this.google){this.google.setCenter({lat:latitude,lng:longitude});if(initial)this.google.setZoom(15);}
+    else this.map.jumpTo({center:[longitude,latitude],...(initial?{zoom:15}:{})});
+  }
   fit() {
     if(!this.samples?.length)return;
     const bounds=new maplibregl.LngLatBounds();this.samples.forEach(s=>bounds.extend([s.longitude,s.latitude]));
@@ -46,7 +52,7 @@ export class RideMap {
     for(let i=0;i<this.samples.length-1;i+=stride){
       const a=this.samples[i],b=this.samples[Math.min(i+stride,this.samples.length-1)];
       if(Date.parse(b.time)-Date.parse(a.time)>stride*3000)continue;
-      route.push(feature({type:'LineString',coordinates:[[a.longitude,a.latitude],[b.longitude,b.latitude]]},{color:color(b,this.metric),index:i}));
+      route.push(feature({type:'LineString',coordinates:[[a.longitude,a.latitude],[b.longitude,b.latitude]]},{color:color(b,this.metric,this.ranges),index:i}));
     }
     const selected=this.samples[this.selected];
     const pointStride=Math.max(40,Math.ceil(this.samples.length/60));
@@ -64,7 +70,7 @@ export class RideMap {
       }
       if(s.lean!==null){
         const p=[s.longitude,s.latitude],n=destination(s.latitude,s.longitude,0,9),e=destination(s.latitude,s.longitude,90,9);
-        lean.push(feature({type:'Polygon',coordinates:[[[p[0]-Math.abs(e[0]-p[0]),p[1]-Math.abs(n[1]-p[1])],[e[0],p[1]-Math.abs(n[1]-p[1])],[e[0],n[1]],[p[0]-Math.abs(e[0]-p[0]),n[1]],[p[0]-Math.abs(e[0]-p[0]),p[1]-Math.abs(n[1]-p[1])]]]}, {height:Math.abs(s.lean)*2,color:color(s,'lean')}));
+        lean.push(feature({type:'Polygon',coordinates:[[[p[0]-Math.abs(e[0]-p[0]),p[1]-Math.abs(n[1]-p[1])],[e[0],p[1]-Math.abs(n[1]-p[1])],[e[0],n[1]],[p[0]-Math.abs(e[0]-p[0]),n[1]],[p[0]-Math.abs(e[0]-p[0]),p[1]-Math.abs(n[1]-p[1])]]]}, {height:Math.abs(s.lean)*2,color:color(s,'lean',this.ranges)}));
       }
     }
     this.map.getSource('route').setData(collection(route));this.map.getSource('vectors').setData(collection(vectors));this.map.getSource('lean').setData(collection(lean));
@@ -91,7 +97,7 @@ export class RideMap {
     for(let i=0;i<samples.length-1;i+=stride){
       const a=samples[i],b=samples[Math.min(i+stride,samples.length-1)];
       if(Date.parse(b.time)-Date.parse(a.time)>stride*3000)continue;
-      const line=new google.maps.Polyline({map:this.google,path:[{lat:a.latitude,lng:a.longitude},{lat:b.latitude,lng:b.longitude}],strokeColor:color(b,this.metric),strokeWeight:6});
+      const line=new google.maps.Polyline({map:this.google,path:[{lat:a.latitude,lng:a.longitude},{lat:b.latitude,lng:b.longitude}],strokeColor:color(b,this.metric,this.ranges),strokeWeight:6});
       line.addListener('click',()=>this.onSelect(i));this.googleLines.push(line);
     }
     const s=samples[this.selected];
