@@ -21,7 +21,7 @@ test('repeated GPS fixes interpolate over the entire GPS interval, not the last 
 test('uneven timestamps and sub-sample frames preserve measured time and heading wrap',()=>{
  const a=sample(0),b=sample(1000,139.001),c=sample(4000,139.002);a.course=359;b.course=1;
  const data=new RidePlayback([a,b,c]);assert.equal(data.timeAtIndex(1.5),2500);
- const frame=data.frame(500);assert.equal(frame.index,0.5);assert.ok(Math.abs(frame.sample.course-360)<1e-8);
+ const frame=data.frame(500);assert.equal(frame.index,0.5);assert.ok(Math.abs(frame.sample.course)<1e-8);
  assert.equal(Date.parse(frame.sample.time),500);
 });
 test('recording pause gaps are excluded and positions are not interpolated across segments',()=>{

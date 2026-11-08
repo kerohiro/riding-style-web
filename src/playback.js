@@ -33,7 +33,7 @@ export class RidePlayback {
   const heading=Number.isFinite(ka.sample.course)&&ka.sample.course>=0?ka.sample.course:courseBetween(ka.sample,kb.sample);
   const endHeading=Number.isFinite(kb.sample.course)&&kb.sample.course>=0?kb.sample.course:heading;
   const position=interpolatePosition({...ka.sample,bearing:heading},{...kb.sample,bearing:endHeading},u);
-  sample={...sample,latitude:position.latitude,longitude:position.longitude,course:heading+angleDelta(heading,endHeading)*u};
+  sample={...sample,latitude:position.latitude,longitude:position.longitude,course:((heading+angleDelta(heading,endHeading)*u)%360+360)%360};
   return {sample,index:i+(j>i?t:0),elapsed:time};
  }
 }
