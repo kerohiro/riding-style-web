@@ -1,4 +1,6 @@
 import './style.css';
+import {ChartView} from './chart-view.js';
+import {chartControlsMarkup,mountChartInteraction} from './chart-interaction.js';
 import {leanGaugeMarkup,renderLeanCard} from './lean-gauge.js';
 import {demoRide,validateRide,distance,magnitude,DEFAULT_RANGES,validateRanges} from './core.js';
 import {saveRide,listRides,deleteRide} from './storage.js';
@@ -17,7 +19,7 @@ document.querySelector('#app').innerHTML=`
 <div class="stats"><div class="stat"><span>速度</span><strong id="speed">—</strong><small>km/h</small></div><div class="stat lean-stat" id="lean-card" role="img" aria-label="推定リーン角 データなし" data-valid="false"><span id="lean-label">リーン角・推定</span>${leanGaugeMarkup()}<strong id="lean">—</strong><small>deg</small></div><div class="stat"><span>合成加速度</span><strong id="accel">—</strong><small>m/s²</small></div></div>
 <div class="panel pose-panel"><div class="section-label">3D TELEMETRY <span>車体座標</span></div><div class="telemetry-modes" role="group" aria-label="3Dテレメトリの表示元"><button id="telemetry-ride" aria-pressed="true">走行データ</button><button id="telemetry-sensor" aria-pressed="false">センサー確認</button></div><p id="telemetry-status" role="status">走行データの姿勢を表示中</p><div id="pose"></div><div class="pose-key"><span>● 車体姿勢</span><span>● 加速度ベクトル</span><span>ドラッグで回転</span></div><div class="vector-values"><div>左右 <b id="ax">—</b></div><div>前後 <b id="ay">—</b></div><div>上下 <b id="az">—</b></div></div><p class="direction" id="direction">水平向き — / 仰角 —</p></div>
 </aside></div>
-<section class="panel timeline"><div class="timeline-title"><div><span class="section-label">RIDE TIMELINE</span><span id="sample-time"></span></div><div class="playback-controls"><label for="playback-rate">再生倍率 <input id="playback-rate" type="number" min="0.01" max="100" step="any" value="1" aria-label="再生倍率"> ×</label><button id="play" class="secondary small">▶ 再生</button></div></div><fieldset class="chart-series-controls"><legend>グラフの表示項目</legend><label style="--series-color:#54efbd"><input type="checkbox" aria-label="リーン角を表示" data-chart-series="lean" checked> <span class="series-line"></span>リーン角（°）<small id="chart-value-lean"></small></label><label style="--series-color:#65baff"><input type="checkbox" aria-label="速度を表示" data-chart-series="speed" checked> <span class="series-line dashed"></span>速度（km/h）<small id="chart-value-speed"></small></label><label style="--series-color:#ffb567"><input type="checkbox" aria-label="合成加速度を表示" data-chart-series="acceleration" checked> <span class="series-line dotted"></span>合成加速度（m/s²）<small id="chart-value-acceleration"></small></label></fieldset><div class="chart-description">縦軸：色ごとの独立目盛（リーン角は＋右／−左）<span>横軸：走行サンプル順</span></div><p class="chart-scale-note">目盛はログ全体から自動調整。高さが同じでも、異なる項目の数値が同じとは限りません。</p><p id="playback-position" class="playback-position">1× / 0.00秒</p><div class="chart-layout"><div id="chart-axes" class="chart-axes" aria-label="表示項目ごとの縦軸目盛"></div><canvas id="chart" aria-label="リーン角・速度・合成加速度の重ね合わせグラフ"></canvas><div id="chart-cursor" aria-hidden="true"></div></div><input type="range" id="timeline" min="0" value="0" step="any" aria-label="走行位置"><div class="timeline-endpoints"><span>START <b id="start-time"></b></span><span>タイムライン・地図上の軌跡を選んで詳細を表示</span><span>FINISH <b id="end-time"></b></span></div></section>
+<section class="panel timeline"><div class="timeline-title"><div><span class="section-label">RIDE TIMELINE</span><span id="sample-time"></span></div><div class="playback-controls"><label for="playback-rate">再生倍率 <input id="playback-rate" type="number" min="0.01" max="100" step="any" value="1" aria-label="再生倍率"> ×</label><button id="play" class="secondary small">▶ 再生</button></div></div><fieldset class="chart-series-controls"><legend>グラフの表示項目</legend><label style="--series-color:#54efbd"><input type="checkbox" aria-label="リーン角を表示" data-chart-series="lean" checked> <span class="series-line"></span>リーン角（°）<small id="chart-value-lean"></small></label><label style="--series-color:#65baff"><input type="checkbox" aria-label="速度を表示" data-chart-series="speed" checked> <span class="series-line dashed"></span>速度（km/h）<small id="chart-value-speed"></small></label><label style="--series-color:#ffb567"><input type="checkbox" aria-label="合成加速度を表示" data-chart-series="acceleration" checked> <span class="series-line dotted"></span>合成加速度（m/s²）<small id="chart-value-acceleration"></small></label></fieldset>${chartControlsMarkup}<div class="chart-description">縦軸：色ごとの独立目盛（リーン角は＋右／−左）<span>横軸：走行サンプル順</span></div><p class="chart-scale-note">各項目は独立した目盛です。初期範囲はログ全体から調整し、縦拡大で範囲を絞れます。</p><p id="playback-position" class="playback-position">1× / 0.00秒</p><div class="chart-layout"><div id="chart-axes" class="chart-axes" aria-label="表示項目ごとの縦軸目盛"></div><canvas id="chart" tabindex="0" aria-label="リーン角・速度・合成加速度の重ね合わせグラフ"></canvas><div id="chart-cursor" aria-hidden="true"></div></div><input type="range" id="timeline" min="0" value="0" step="any" aria-label="走行位置"><div class="timeline-endpoints"><span>START <b id="start-time"></b></span><span>タイムライン・地図上の軌跡を選んで詳細を表示</span><span>FINISH <b id="end-time"></b></span></div></section>
 <section class="panel recorder"><div class="recorder-copy"><span class="section-label">RECORD YOUR NEXT RIDE</span><h2>次の走りを記録する。</h2><p id="status" role="status">iPhoneを車体に縦向き・画面をライダー側に固定してください。</p></div><div class="record-buttons"><button id="permission" class="secondary">① センサーを許可</button><button id="calibrate" class="secondary">② 直立基準を設定</button><button id="record" class="primary">● 記録開始</button><button id="pause-recording" class="secondary" hidden>Ⅱ 記録を一時中断</button><button id="stop" class="danger" hidden>■ 終了して保存</button></div></section>
 <div class="bottom-actions"><button id="save" class="text-button">↓ この走行を保存</button><button id="export" class="text-button">↗ JSONを書き出す</button><label class="text-button import-label">＋ JSONを読み込む<input type="file" id="import" accept=".json,application/json" hidden></label><a id="apple-link" target="_blank" rel="noopener">Apple Mapで位置を開く ↗</a></div>
 <details class="notes"><summary>計測方法・精度・データの保存について</summary><p>停車して車体を直立させ、センサー許可 → 直立基準 → 記録開始の順に操作します。端末は縦向き、背面を前方、画面をライダー側に固定してください。基準設定後は取付方向を変えないでください。</p><p>計測は画面表示中のみ。計測中に画面ロック・別タブ・他アプリへ移動すると停止し、保存を試みます。一時中断中はページが保持されていれば、戻って同じログへ再開できます。再読込・ブラウザ強制終了後の同一ログへの記録再開は未対応です。ブラウザ強制終了時の完全保存は保証できないため、JSONも書き出してください。保存先はこのブラウザのIndexedDBで、別端末とは同期されません。プライベートブラウズやサイトデータ削除で消えることがあります。</p><p>リーン角は推定値で、旋回加速度・振動やブラウザのセンサー融合による誤差があります。実車での精度は未検証です。加速度は重力除去済み値を使用し、非対応時は「—」。GPS速度や進行方向が取得できない場合も「—」となります。GPSは直近3秒以内・水平精度50 m以内の測位を最大10 HzのIMUサンプルに紐付けます。独立した10 Hz GPS測位ではありません。</p><p>地図の柱はリーン角の大きさを示す模式表示で、車体の実寸や高度を示しません。加速度の矢印は車体の前後・左右成分をGPS進行方向で水平地図へ投影した参考表示です。仰角とリーン姿勢は右の3Dモデルで確認してください。Google Mapsの傾斜表示は地域・ズーム・地図仕様に依存します。</p><p>走行データはGitHubやサーバーへ送信しません。地図閲覧ではOpenStreetMapまたはGoogleへ通常の通信が発生します。走行中は操作せず、停車して確認してください。</p></details>
@@ -28,6 +30,7 @@ document.querySelector('#app').innerHTML=`
 let ride=demoRide(),previousRide=null,index=90,metric='speed',playing=null,lastRender=0,lastCheckpoint=0,saving=Promise.resolve();
 let map,pose,latestFix=null,follow=true,firstFix=true,telemetryMode='ride',liveMotion=null,sensorError=null;
 const playbackClock=new PlaybackClock();let playbackData=new RidePlayback(ride.samples),playbackRide=ride,playbackCount=ride.samples.length,playbackFrame=null,playbackRAF=null,lastPlaybackUI=0,lastPlaybackOverlay=0;
+const chartView=new ChartView();let chartRideId=ride.id,chartCache=null,chartDrawRequest=null;
 let chartSelection=Object.keys(TIMELINE_SERIES),chartGeometry={left:0,width:1};
 try{const stored=localStorage.getItem('ride-timeline-series');if(stored)chartSelection=readTimelineSelection(JSON.parse(stored));}catch{}
 for(const input of document.querySelectorAll('[data-chart-series]'))input.checked=chartSelection.includes(input.dataset.chartSeries);
@@ -88,6 +91,7 @@ function setRecording(active){
  $('ride-kind').textContent=active?(recorder.paused?'Ⅱ RECORDING PAUSED':'● LIVE RECORDING'):ride.isDemo?'DEMO ROUTE':'SAVED RIDE';
 }
 function render(){
+ if(chartRideId!==ride.id){chartView.reset();chartRideId=ride.id;chartCache=null;}
  if(!recorder.active && (playbackRide!==ride || playbackCount!==ride.samples.length)){playbackData=new RidePlayback(ride.samples);playbackRide=ride;playbackCount=ride.samples.length;}
 
  $('ride-name').textContent=ride.name;$('demo-tag').textContent=ride.isDemo?'DEMO':'GPS + IMU';
@@ -117,8 +121,12 @@ function updatePlaybackNumbers(s){
 }
 function updatePlaybackCursor(){
  $('timeline').value=index;
- $('chart-cursor').style.left=`${chartGeometry.left+chartGeometry.width*index/Math.max(1,ride.samples.length-1)}px`;
- $('chart-cursor').hidden=chartSelection.length===0;
+ const position=index/Math.max(1,ride.samples.length-1);
+ if($('chart-follow').checked && chartView.reveal(position))scheduleChartDraw();
+ const fraction=chartView.fraction(position);
+ $('chart-cursor').style.left=`${chartGeometry.left+chartGeometry.width*Math.max(0,Math.min(1,fraction))}px`;
+ $('chart-cursor').hidden=chartSelection.length===0 || fraction<0 || fraction>1;
+ $('chart-outside').hidden=fraction>=0&&fraction<=1;
 }
 function renderTelemetry(s){
  for(const [id,k] of [['ax','x'],['ay','y'],['az','z']])$(id).textContent=signed(s?.acceleration?.[k]);
@@ -153,7 +161,19 @@ $('telemetry-ride').onclick=()=>setTelemetryMode('ride');
 function drawChart(){
  const canvas=$('chart'),axes=$('chart-axes');
  // Scale columns belong to each series and are separate from the heatmap settings.
- const series=chartSelection.map(key=>timelineSeries(ride.samples,key,Math.max(1,canvas.clientWidth)));
+ if(!chartCache || chartCache.samples!==ride.samples || chartCache.length!==ride.samples.length){
+  chartCache={samples:ride.samples,length:ride.samples.length,scales:Object.fromEntries(Object.keys(TIMELINE_SERIES).map(key=>[key,timelineSeries(ride.samples,key,1)]))};
+ }
+ const last=Math.max(1,ride.samples.length-1),start=chartView.x*last,end=(chartView.x+chartView.width)*last;
+ const series=chartSelection.map(key=>{
+  const base=chartCache.scales[key],range=base.max-base.min;
+  return timelineSeries(ride.samples,key,Math.max(1,canvas.clientWidth),{start,end,max:base.max-chartView.y*range,min:base.max-(chartView.y+chartView.height)*range});
+ });
+ $('chart-zoom').value=Number((1/chartView.width).toFixed(2));$('chart-zoom').max=last;$('chart-yzoom').value=Number((1/chartView.height).toFixed(2));
+ const firstSample=ride.samples[Math.min(ride.samples.length-1,Math.floor(start))],lastSample=ride.samples[Math.min(ride.samples.length-1,Math.ceil(end))];
+ $('chart-window').textContent=firstSample?`表示区間 ${time(firstSample.time)} — ${time(lastSample.time)} ／ 横 ${(1/chartView.width).toFixed(1)}×・縦 ${(1/chartView.height).toFixed(1)}×`:'走行データ待ち';
+ $('timeline').min=start;$('timeline').max=end;
+ if(firstSample){$('start-time').textContent=time(firstSample.time);$('end-time').textContent=time(lastSample.time);}
  axes.replaceChildren();
  for(const entry of series){
   const column=document.createElement('div');column.className='chart-axis-column';column.style.color=entry.color;column.setAttribute('aria-label',`${entry.label}（${entry.unit}）の目盛`);
@@ -169,12 +189,13 @@ function drawChart(){
  const c=canvas.getContext('2d');c.scale(scale,scale);c.clearRect(0,0,w,h);
  c.strokeStyle='#25323e';c.lineWidth=1;
  for(let tick=0;tick<=4;tick++){const y=4+(h-8)*tick/4;c.beginPath();c.moveTo(0,y);c.lineTo(w,y);c.stroke();}
+ c.save();c.beginPath();c.rect(0,4,w,h-8);c.clip();
  for(const entry of series){
   c.beginPath();c.strokeStyle=entry.color;c.lineWidth=1.6;c.setLineDash(entry.dash);let pen=false;
-  for(const point of entry.points){if(point===null){pen=false;continue;}const x=point.index/Math.max(1,ride.samples.length-1)*w,y=timelineY(point.value,entry,h);if(pen)c.lineTo(x,y);else c.moveTo(x,y);pen=true;}
+  for(const point of entry.points){if(point===null){pen=false;continue;}const x=chartView.fraction(point.index/Math.max(1,ride.samples.length-1))*w,y=timelineY(point.value,entry,h);if(pen)c.lineTo(x,y);else c.moveTo(x,y);pen=true;}
   c.stroke();
  }
- c.setLineDash([]);
+ c.restore();c.setLineDash([]);
  if(!series.length){c.fillStyle='#a9bac9';c.font='12px sans-serif';c.textAlign='center';c.fillText('表示する項目を選択してください',w/2,h/2);}
  canvas.setAttribute('aria-label',series.length?series.map(s=>`${s.label}（${s.unit}）${s.hasData?'':'・データなし'}`).join('、')+'の重ね合わせグラフ。縦軸は色ごとの独立目盛。':'表示項目なし');
  updatePlaybackCursor();
@@ -186,7 +207,7 @@ for(const input of document.querySelectorAll('[data-chart-series]'))input.onchan
 };
 new ResizeObserver(drawChart).observe($('chart'));
 $('timeline').oninput=e=>{stopPlayback();setTelemetryMode('ride');index=Number(e.target.value);renderSelected();};
-$('chart').onclick=e=>{if(recorder.active)return;stopPlayback();setTelemetryMode('ride');index=Math.round((e.offsetX/$('chart').clientWidth)*(ride.samples.length-1));renderSelected();};
+
 function applyPlaybackFrame(frame,now,force=false){
  if(!frame)return;
  playbackFrame=frame;index=frame.index;renderLeanCard(frame.sample.lean);updateMapTracking();map?.showPlaybackFrame(frame.sample);
@@ -263,3 +284,6 @@ $('openmap').onclick=()=>{map?.useOpenMap();followPosition();$('map-provider').t
 window.addEventListener('pagehide',()=>{if(recorder.active && !recorder.paused)recorder.stop('ページ終了のため停止しました');});
 window.addEventListener('beforeunload',e=>{if(recorder.active){e.preventDefault();e.returnValue='';}});
 render();map?.update(ride.samples,metric,index,true);followPosition();
+
+function scheduleChartDraw(){if(chartDrawRequest===null)chartDrawRequest=requestAnimationFrame(()=>{chartDrawRequest=null;drawChart();});}
+mountChartInteraction({view:chartView,minWidth:()=>1/Math.max(1,ride.samples.length-1),onDraw:scheduleChartDraw,getPosition:()=>index/Math.max(1,ride.samples.length-1),onError:notify,onSeek:position=>{if(recorder.active)return;stopPlayback();setTelemetryMode('ride');index=position*Math.max(0,ride.samples.length-1);renderSelected();}});
