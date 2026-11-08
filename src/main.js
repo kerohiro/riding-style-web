@@ -4,6 +4,7 @@ import {saveRide,listRides,deleteRide} from './storage.js';
 import {Recorder} from './recorder.js';
 import {RideMap} from './maps.js';
 import {Pose} from './pose.js';
+import {syncFollow} from './follow.js';
 const $=id=>document.getElementById(id);
 document.querySelector('#app').innerHTML=`
 <header><a class="brand" href="./"><span class="brand-mark">↗</span> RIDE<span>ATLAS</span></a><div class="header-right"><span class="live-dot"></span><span>RIDING STYLE ANALYSIS</span><button id="settings" class="icon-button" aria-label="表示・地図設定">⚙</button></div></header>
@@ -29,9 +30,15 @@ function updateLegend(){
  $('legend-title').textContent={speed:'SPEED',acceleration:'ACCELERATION',lean:'LEAN ANGLE'}[metric];
  const r=ranges[metric];$('legend-range').textContent=`${r.min} — ${r.max} ${{speed:'km/h',acceleration:'m/s²',lean:'°（絶対値）'}[metric]}`;
 }
+function updateFollowLabel(){
+ $('follow').setAttribute('aria-pressed',String(follow));
+ $('follow').textContent=`◎ ${recorder.active?'現在地':'再生位置'}追従 ${follow?'ON':'OFF'}`;
+}
+function followPosition(){
+ if(syncFollow(map,{enabled:follow,recording:recorder.active,sample:ride.samples[index],fix:latestFix,initial:firstFix}) && recorder.active)firstFix=false;
+}
 function setFollow(enabled){
- follow=enabled;$('follow').setAttribute('aria-pressed',String(follow));$('follow').textContent=`◎ 現在地追従 ${follow?'ON':'OFF'}`;
- if(follow && recorder.active && latestFix){map?.centerLocation(latestFix,firstFix);firstFix=false;}
+ follow=enabled;updateFollowLabel();followPosition();
 }
 
 function notify(text){$('toast').textContent=text;$('toast').hidden=false;clearTimeout(notify.timer);notify.timer=setTimeout(()=>$('toast').hidden=true,6000);}
@@ -55,7 +62,7 @@ const recorder=new Recorder(value=>{
  setRecording(false);
 },fix=>{
  latestFix=fix;
- if(follow){map?.centerLocation(fix,firstFix);firstFix=false;}
+ followPosition();
 },motion=>{
  liveMotion=motion;sensorError=null;
  if(telemetryMode==='sensor')renderLiveMotion();
@@ -64,6 +71,7 @@ const fmt=(v,d=1)=>v===null||v===undefined?'—':v.toFixed(d);
 const signed=v=>v===null||v===undefined?'—':(v>=0?'+':'')+v.toFixed(2);
 const time=v=>new Date(v).toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
 function setRecording(active){
+ updateFollowLabel();
  for(const id of ['record','calibrate','permission','library','save','import','play'])$(id).disabled=active;
  $('record').hidden=active;$('stop').hidden=!active;$('timeline').disabled=active;
  $('ride-kind').textContent=active?'● LIVE RECORDING':ride.isDemo?'DEMO ROUTE':'SAVED RIDE';
@@ -83,7 +91,7 @@ function renderSelected(){
  if(telemetryMode==='ride')renderTelemetry(s);
  $('sample-time').textContent=time(s.time)+' / '+(index+1)+'点目';
  $('apple-link').href=`https://maps.apple.com/?ll=${s.latitude},${s.longitude}&q=${encodeURIComponent('走行データの選択位置')}`;
- map?.update(ride.samples,metric,index);drawChart();
+ map?.update(ride.samples,metric,index);if(!recorder.active)followPosition();drawChart();
 }
 function renderTelemetry(s){
  for(const [id,k] of [['ax','x'],['ay','y'],['az','z']])$(id).textContent=signed(s?.acceleration?.[k]);
@@ -132,9 +140,9 @@ new ResizeObserver(drawChart).observe($('chart'));
 $('timeline').oninput=e=>{setTelemetryMode('ride');index=Number(e.target.value);renderSelected();};
 $('chart').onclick=e=>{if(recorder.active)return;setTelemetryMode('ride');index=Math.round((e.offsetX/$('chart').clientWidth)*(ride.samples.length-1));renderSelected();};
 function stopPlayback(){clearInterval(playing);playing=null;$('play').textContent='▶ 再生';}
-$('play').onclick=()=>{setTelemetryMode('ride');if(playing){stopPlayback();return;}if(index>=ride.samples.length-1)index=0;$('play').textContent='Ⅱ 停止';playing=setInterval(()=>{index++;if(index>=ride.samples.length){index=ride.samples.length-1;stopPlayback();}renderSelected();},150);};
+$('play').onclick=()=>{setTelemetryMode('ride');if(playing){stopPlayback();return;}if(index>=ride.samples.length-1)index=0;setFollow(true);renderSelected();$('play').textContent='Ⅱ 停止';playing=setInterval(()=>{index++;if(index>=ride.samples.length){index=ride.samples.length-1;stopPlayback();}renderSelected();},150);};
 for(const button of document.querySelectorAll('[data-metric]'))button.onclick=()=>{metric=button.dataset.metric;document.querySelectorAll('[data-metric]').forEach(b=>b.classList.toggle('active',b===button));updateLegend();renderSelected();};
-$('pitch').onclick=()=>{map?.togglePitch();$('pitch').textContent=map?.pitch?'3D':'2D';};$('fit').onclick=()=>{if(recorder.active)setFollow(false);if(map?.google)map.renderGoogle(true);else map?.fit();};$('focus').onclick=()=>{if(recorder.active)setFollow(false);map?.focus();};
+$('pitch').onclick=()=>{map?.togglePitch();$('pitch').textContent=map?.pitch?'3D':'2D';};$('fit').onclick=()=>{setFollow(false);if(map?.google)map.renderGoogle(true);else map?.fit();};$('focus').onclick=()=>{setFollow(true);map?.focus();};
 $('follow').onclick=()=>setFollow(!follow);
 async function attempt(fn){try{await fn();}catch(e){notify(e.message);status(e.message);}}
 $('permission').onclick=()=>attempt(enableSensorPreview);$('calibrate').onclick=()=>attempt(()=>recorder.calibrate());
@@ -142,7 +150,7 @@ $('record').onclick=()=>attempt(async()=>{stopPlayback();previousRide=ride;lates
 $('stop').onclick=()=>recorder.stop();
 $('save').onclick=()=>queueSave(ride);
 $('export').onclick=()=>{const blob=new Blob([JSON.stringify(ride)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='ride-'+ride.id+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),10000);};
-function openRide(value){stopPlayback();ride=value;index=0;setTelemetryMode('ride');render();map?.update(ride.samples,metric,index,true);}
+function openRide(value){stopPlayback();ride=value;index=0;setTelemetryMode('ride');render();map?.update(ride.samples,metric,index,true);followPosition();}
 $('import').onchange=e=>attempt(async()=>{const file=e.target.files[0];if(!file)return;if(file.size>100*1024*1024)throw Error('ファイルは100 MB以下にしてください');const value=validateRide(JSON.parse(await file.text()));await saveRide(value);openRide(value);notify('走行JSONを読み込み・保存しました');e.target.value='';});
 async function showLibrary(){
  const container=$('ride-list');container.replaceChildren();
@@ -170,8 +178,8 @@ $('range-form').onsubmit=e=>{
 };
 $('reset-ranges').onclick=()=>{for(const key of Object.keys(DEFAULT_RANGES))for(const bound of ['min','max'])$(`${key}-${bound}`).value=DEFAULT_RANGES[key][bound];$('range-form').requestSubmit();};
 window.gm_authFailure=()=>{$('google-error').textContent='Google Mapsの認証に失敗しました。API有効化・課金・キーのURL制限を確認してください。';notify('Google Maps認証失敗。地図設定から標準地図へ戻せます。');};
-$('google').onclick=async()=>{try{$('google-error').textContent='読み込み中…';const key=$('google-key').value.trim();await map.useGoogle(key);try{localStorage.setItem('google-maps-key',key);}catch{}$('google-error').textContent='Google Mapsに切り替えました。';$('map-provider').textContent='GOOGLE MAPS';if(recorder.active && follow && latestFix)map.centerLocation(latestFix);}catch(e){$('google-error').textContent=e.message;}};
-$('openmap').onclick=()=>{map?.useOpenMap();if(recorder.active && follow && latestFix)map.centerLocation(latestFix);$('map-provider').textContent='OPENSTREETMAP';$('settings-dialog').close();};
+$('google').onclick=async()=>{try{$('google-error').textContent='読み込み中…';const key=$('google-key').value.trim();await map.useGoogle(key);try{localStorage.setItem('google-maps-key',key);}catch{}$('google-error').textContent='Google Mapsに切り替えました。';$('map-provider').textContent='GOOGLE MAPS';followPosition();}catch(e){$('google-error').textContent=e.message;}};
+$('openmap').onclick=()=>{map?.useOpenMap();followPosition();$('map-provider').textContent='OPENSTREETMAP';$('settings-dialog').close();};
 window.addEventListener('pagehide',()=>{if(recorder.active)recorder.stop('ページ終了のため停止しました');});
 window.addEventListener('beforeunload',e=>{if(recorder.active){e.preventDefault();e.returnValue='';}});
-render();map?.update(ride.samples,metric,index,true);
+render();map?.update(ride.samples,metric,index,true);followPosition();
